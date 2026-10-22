@@ -60,3 +60,8 @@ def test_quantile_levels_must_match_fit(frame):
                          start="2023-04-01")
     with pytest.raises(ValueError, match="quantile"):
         model.predict(batch.inputs, horizon=1, quantile_levels=(0.5,))
+
+
+def test_experiment_registers_xgboost_family():
+    from pm25.experiment import make_models
+    assert [m.name for m in make_models("xgboost")] == ["xgboost"]

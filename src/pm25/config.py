@@ -10,6 +10,7 @@ MOENV_API_KEY_ENV = "MOENV_API_KEY"
 
 RAW_DATA_DIR = "data/raw"
 PROCESSED_DATA_DIR = "data/processed"
+PREDICTIONS_DIR = "results/predictions"
 
 # Station selection: 3 stations per air-quality region named in the proposal.
 STATIONS = {
@@ -39,6 +40,7 @@ YEARS = (2021, 2022, 2023, 2024, 2025)
 TEST_YEAR = 2025
 
 HORIZONS = (1, 6, 24)
+FORECAST_LENGTH = max(HORIZONS)  # every origin forecasts 24 steps; HORIZONS are lead times
 CONTEXT_LENGTH = 512
 ORIGIN_HOURS = tuple(range(24))  # a rolling origin every hour
 # Windows need a complete target and complete last 48h of context (XGBoost lag range);

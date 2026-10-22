@@ -67,3 +67,8 @@ def test_lead_beyond_horizon_and_quantile_mismatch_raise(frame):
         model.predict(batch.inputs, horizon=1)
     with pytest.raises(ValueError, match="quantile"):
         model.predict(batch.inputs, horizon=6, quantile_levels=(0.5,))
+
+
+def test_experiment_registers_lstm_family():
+    from pm25.experiment import make_models
+    assert [m.name for m in make_models("lstm")] == ["lstm"]
