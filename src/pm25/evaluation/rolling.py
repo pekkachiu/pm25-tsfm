@@ -2,9 +2,10 @@
 
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
-from pm25.config import ORIGIN_HOURS
+from pm25.config import ORIGIN_HOURS, TARGET
 
 
 @dataclass(frozen=True)
@@ -38,3 +39,30 @@ def make_windows(series: pd.Series, context_length: int, horizon: int,
         for i in positions
     )
     return [w for w in windows if not (w.context.isna().any() or w.target.isna().any())]
+
+
+@dataclass(frozen=True)
+class ForecastInput:
+    context: pd.DataFrame  # context hours: target + covariates
+    future: pd.DataFrame   # forecast hours: covariates only (used by the oracle variant)
+
+
+@dataclass(frozen=True)
+class ForecastBatch:
+    origins: list[pd.Timestamp]
+    inputs: list[ForecastInput]
+    targets: np.ndarray  # (n_windows, horizon)
+
+
+def build_inputs(df: pd.DataFrame, context_length: int, horizon: int,
+                 origin_hours: tuple[int, ...] = ORIGIN_HOURS, start=None, end=None,
+                 target: str = TARGET) -> ForecastBatch:
+    """Model inputs for every valid rolling origin; validity depends on the target only."""
+    windows = make_windows(df[target], context_length, horizon, origin_hours, start, end)
+    covariates = df.drop(columns=target)
+    inputs = [
+        ForecastInput(context=df.loc[w.context.index], future=covariates.loc[w.target.index])
+        for w in windows
+    ]
+    targets = np.array([w.target.to_numpy() for w in windows]).reshape(len(windows), horizon)
+    return ForecastBatch(origins=[w.origin for w in windows], inputs=inputs, targets=targets)
