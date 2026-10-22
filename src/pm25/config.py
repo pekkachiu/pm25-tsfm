@@ -22,13 +22,16 @@ RAW_COLUMNS = {
     "pm10": "pm10",
     "no2": "no2",
     "o3": "o3",
-    "wind_speed": "wind_speed",
-    "wind_direc": "wind_dir",
+    "windspeed": "wind_speed",
+    "winddirec": "wind_dir",
 }
 TARGET = "pm25"
 MEASUREMENTS = ("pm25", "pm10", "no2", "o3", "wind_speed", "wind_dir")
 COVARIATES = ("pm10", "no2", "o3", "wind_speed", "wind_sin", "wind_cos")
 WIND_COVARIATES = ("wind_speed", "wind_sin", "wind_cos")
+
+RAW_DATA_DIR = "data/raw"
+PROCESSED_DATA_DIR = "data/processed"
 
 MAX_INTERP_GAP_HOURS = 3
 
