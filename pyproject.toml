@@ -1,0 +1,33 @@
+[project]
+name = "pm25-tsfm"
+version = "0.1.0"
+description = "Covariate-informed zero-shot PM2.5 forecasting in Taiwan with Chronos-Bolt / Chronos-2"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "requests>=2.32",
+]
+
+[project.optional-dependencies]
+models = [
+    "chronos-forecasting>=2.0",
+    "torch>=2.2",
+    "xgboost>=2.0",
+    "river>=0.21",
+    "matplotlib>=3.8",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-cov>=5"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pm25"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=pm25 --cov-report=term-missing"
