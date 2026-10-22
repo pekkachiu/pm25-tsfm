@@ -1,4 +1,3 @@
-import pm25.models  # noqa: F401  (loads xgboost before torch; see pm25/models/__init__.py)
 import numpy as np
 import pandas as pd
 import pytest
