@@ -4,7 +4,7 @@ import pytest
 
 import pandas as pd
 
-from pm25.data.download import MoenvClient, download_station_year, get_api_key, year_filter
+from pm25.data.download import MoenvClient, download_station_year, get_api_key, item_year_filter
 
 
 def _response(records):
@@ -63,22 +63,25 @@ def test_fetch_accepts_wrapped_records_payload():
     assert client.fetch("aqx_p_488") == [{"a": 1}]
 
 
-def test_year_filter_uses_minute_precision_string_bounds():
-    # The API compares dates as strings, so bounds must sort around "YYYY-MM-DD HH:MM".
-    f = year_filter("古亭", 2021)
-    assert f == ("sitename,EQ,古亭|datacreationdate,GR,2020-12-31 23:59"
-                 "|datacreationdate,LT,2021-12-31 23:59")
+def test_item_year_filter_pads_bounds_by_a_day():
+    # monitordate is compared as a string and sometimes has a trailing space,
+    # so bounds are padded and the exact year is cut later in preprocessing.
+    f = item_year_filter("古亭", "PM2.5", 2021)
+    assert f == ("sitename,EQ,古亭|itemengname,EQ,PM2.5"
+                 "|monitordate,GR,2020-12-30|monitordate,LT,2022-01-01")
 
 
-def test_download_station_year_writes_csv(tmp_path):
+def test_download_station_year_fetches_each_item_and_writes_csv(tmp_path):
     client = MagicMock()
-    client.fetch.return_value = [{"sitename": "古亭", "pm2.5": "10",
-                                  "datacreationdate": "2021-01-01 01:00"}]
-    path = download_station_year(client, "古亭", 2021, tmp_path)
+    client.fetch.side_effect = lambda dataset, filters, sort: [
+        {"sitename": "古亭", "itemengname": filters.split("|")[1].split(",")[2],
+         "monitordate": "2021-01-01", "monitorvalue00": "10"}]
+    path = download_station_year(client, "古亭", 2021, tmp_path, items=("PM2.5", "PM10"))
     assert path == tmp_path / "古亭_2021.csv"
     df = pd.read_csv(path, dtype=str)
-    assert df.loc[0, "pm2.5"] == "10"
-    assert client.fetch.call_args.kwargs["sort"] == "datacreationdate asc"
+    assert sorted(df["itemengname"]) == ["PM10", "PM2.5"]
+    assert client.fetch.call_count == 2
+    assert client.fetch.call_args.args[0] == "aqx_p_13"
 
 
 def test_download_station_year_skips_existing(tmp_path):
@@ -92,5 +95,5 @@ def test_download_station_year_empty_raises(tmp_path):
     client = MagicMock()
     client.fetch.return_value = []
     with pytest.raises(RuntimeError, match="no records"):
-        download_station_year(client, "古亭", 2021, tmp_path)
+        download_station_year(client, "古亭", 2021, tmp_path, items=("PM2.5",))
     assert not (tmp_path / "古亭_2021.csv").exists()

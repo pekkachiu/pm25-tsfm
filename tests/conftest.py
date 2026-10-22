@@ -3,6 +3,13 @@ import pandas as pd
 import pytest
 
 
+def daily_record(station, item, date, values):
+    """Mimics one aqx_p_13 record: one item, one day, 24 hourly columns (strings)."""
+    hours = {f"monitorvalue{h:02d}": v for h, v in enumerate(values)}
+    return {"siteid": "14", "sitename": station, "itemengname": item,
+            "monitordate": date, **hours}
+
+
 @pytest.fixture
 def hourly_index():
     return pd.date_range("2024-01-01 00:00", periods=48, freq="h", tz="Asia/Taipei")
@@ -10,14 +17,13 @@ def hourly_index():
 
 @pytest.fixture
 def raw_records():
-    """Mimics records returned by the MOENV AQX_P_488 API (all values are strings)."""
+    def day(item, first, date="2024-01-01"):
+        return daily_record("古亭", item, date, [first, *[str(h) for h in range(1, 24)]])
     return [
-        {"sitename": "古亭", "county": "臺北市", "pm2.5": "12", "pm10": "20", "no2": "15",
-         "o3": "30", "windspeed": "1.5", "winddirec": "90", "datacreationdate": "2024-01-01 01:00"},
-        {"sitename": "古亭", "county": "臺北市", "pm2.5": "x", "pm10": "21", "no2": "-",
-         "o3": "31", "windspeed": "1.6", "winddirec": "0", "datacreationdate": "2024-01-01 00:00"},
-        {"sitename": "板橋", "county": "新北市", "pm2.5": "-3", "pm10": "", "no2": "16",
-         "o3": "NR", "windspeed": "2.0", "winddirec": "180", "datacreationdate": "2024-01-01 00:00"},
+        day("PM2.5", "x"), day("PM10", "20"), day("NO2", "-"), day("O3", "30"),
+        day("WIND_SPEED", "1.5"), day("WIND_DIREC", "90"),
+        day("AMB_TEMP", "25"),  # items outside the experiment are ignored
+        daily_record("板橋", "PM2.5", "2024-01-01 ", ["-3", *["5"] * 23]),
     ]
 
 

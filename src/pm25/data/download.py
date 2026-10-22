@@ -11,6 +11,7 @@ import pandas as pd
 import requests
 
 from pm25.config import (
+    ITEMS,
     MOENV_API_BASE,
     MOENV_API_KEY_ENV,
     MOENV_DATASET,
@@ -69,22 +70,28 @@ class MoenvClient:
             time.sleep(self._sleep_seconds)
 
 
-def year_filter(station: str, year: int) -> str:
-    """Filter for one station-year. Dates are compared as strings by the API,
-    so minute-precision bounds are used to include hour 00:00 correctly."""
-    return (f"sitename,EQ,{station}"
-            f"|datacreationdate,GR,{year - 1}-12-31 23:59"
-            f"|datacreationdate,LT,{year}-12-31 23:59")
+def item_year_filter(station: str, item: str, year: int) -> str:
+    """Filter for one station-item-year. monitordate is compared as a string and may carry
+    a trailing space, so bounds are padded; preprocessing trims to the exact year."""
+    return (f"sitename,EQ,{station}|itemengname,EQ,{item}"
+            f"|monitordate,GR,{year - 1}-12-30|monitordate,LT,{year + 1}-01-01")
 
 
-def download_station_year(client: MoenvClient, station: str, year: int,
-                          out_dir: Path) -> Path:
-    """Download one station-year to `<out_dir>/<station>_<year>.csv` (skipped if cached)."""
+def download_station_year(client: MoenvClient, station: str, year: int, out_dir: Path,
+                          items: tuple[str, ...] = tuple(ITEMS)) -> Path:
+    """Download one station-year (all items) to `<out_dir>/<station>_<year>.csv`.
+
+    Skipped if the file already exists.
+    """
     path = Path(out_dir) / f"{station}_{year}.csv"
     if path.exists():
         return path
-    records = client.fetch(MOENV_DATASET, filters=year_filter(station, year),
-                           sort="datacreationdate asc")
+    records = [
+        record
+        for item in items
+        for record in client.fetch(MOENV_DATASET, filters=item_year_filter(station, item, year),
+                                   sort="monitordate asc")
+    ]
     if not records:
         raise RuntimeError(f"no records for {station} {year}")
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -24,7 +24,9 @@ def build_station(raw_dir: Path, station: str, years: tuple[int, ...] = YEARS) -
     if missing:
         raise FileNotFoundError(f"raw files not found: {missing}")
     raw = pd.concat([pd.read_csv(p, dtype=str) for p in paths], ignore_index=True)
-    return preprocess_station(records_to_frame(raw.to_dict("records")))
+    frame = records_to_frame(raw.to_dict("records"))
+    in_years = frame["time"].dt.year.isin(years)
+    return preprocess_station(frame[in_years])
 
 
 def missing_report(df: pd.DataFrame) -> pd.DataFrame:

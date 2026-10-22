@@ -3,30 +3,41 @@
 import numpy as np
 import pandas as pd
 
-from pm25.config import MAX_INTERP_GAP_HOURS, MEASUREMENTS, RAW_COLUMNS, TIMEZONE
+from pm25.config import ITEMS, MAX_INTERP_GAP_HOURS, MEASUREMENTS, TIMEZONE
+
+HOUR_COLUMNS = [f"monitorvalue{h:02d}" for h in range(24)]
+REQUIRED_COLUMNS = ["sitename", "itemengname", "monitordate", *HOUR_COLUMNS]
 
 
 def records_to_frame(records: list[dict]) -> pd.DataFrame:
-    """Convert raw API records to a typed long-format frame; invalid flags become NaN."""
+    """Convert aqx_p_13 daily records to a wide hourly frame; invalid flags become NaN.
+
+    monitorvalueHH on day D is the hour ending at D (HH+1):00, matching aqx_p_488 stamps.
+    """
     if not records:
         raise ValueError("no records to convert")
     raw = pd.DataFrame.from_records(records)
-    missing = set(RAW_COLUMNS) - set(raw.columns)
+    missing = set(REQUIRED_COLUMNS) - set(raw.columns)
     if missing:
         raise ValueError(f"records missing columns: {sorted(missing)}")
 
-    df = raw[list(RAW_COLUMNS)].rename(columns=RAW_COLUMNS)
-    numeric = {
-        col: pd.to_numeric(df[col], errors="coerce").where(lambda v: v >= 0)
-        for col in MEASUREMENTS
-    }
-    times = pd.to_datetime(df["time"], errors="coerce").dt.tz_localize(TIMEZONE)
-    out = df.assign(time=times, **numeric).dropna(subset=["time"])
-    return (
-        out.drop_duplicates(subset=["station", "time"], keep="first")
-        .sort_values(["station", "time"])
-        .reset_index(drop=True)
-    )
+    relevant = raw[raw["itemengname"].isin(ITEMS)]
+    long = relevant.melt(id_vars=["sitename", "itemengname", "monitordate"],
+                         value_vars=HOUR_COLUMNS, var_name="hour", value_name="value")
+    day = pd.to_datetime(long["monitordate"].astype(str).str.strip(), errors="coerce")
+    hour_ending = pd.to_timedelta(long["hour"].str[-2:].astype(int) + 1, unit="h")
+    value = pd.to_numeric(long["value"], errors="coerce")
+    tidy = pd.DataFrame({
+        "station": long["sitename"],
+        "time": (day + hour_ending).dt.tz_localize(TIMEZONE),
+        "item": long["itemengname"].map(ITEMS),
+        "value": value.where(value >= 0),
+    }).dropna(subset=["time"])
+    # Duplicate records never disagree on non-null values, so keep the first non-null.
+    wide = tidy.pivot_table(index=["station", "time"], columns="item", values="value",
+                            aggfunc="first", dropna=False)
+    return (wide.reindex(columns=list(MEASUREMENTS)).reset_index()
+            .rename_axis(columns=None).sort_values(["station", "time"]).reset_index(drop=True))
 
 
 def fill_short_gaps(series: pd.Series, max_gap: int = MAX_INTERP_GAP_HOURS) -> pd.Series:

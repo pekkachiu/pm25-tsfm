@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from conftest import daily_record
 from pm25.data.preprocess import (
     encode_wind_direction,
     fill_short_gaps,
@@ -11,36 +12,44 @@ from pm25.data.preprocess import (
 
 
 class TestRecordsToFrame:
-    def test_parses_numeric_and_marks_invalid_as_nan(self, raw_records):
+    def test_hour_columns_are_hour_ending(self, raw_records):
+        # monitorvalueHH on day D is the hour ending at D (HH+1):00 (matches aqx_p_488).
         df = records_to_frame(raw_records)
-        guting = df[df["station"] == "古亭"].sort_values("time")
-        assert np.isnan(guting["pm25"].iloc[0])  # "x" flag
-        assert guting["pm25"].iloc[1] == 12.0
-        assert np.isnan(guting["no2"].iloc[0])  # "-" flag
+        guting = df[df["station"] == "古亭"]
+        assert guting["time"].min() == pd.Timestamp("2024-01-01 01:00", tz="Asia/Taipei")
+        assert guting["time"].max() == pd.Timestamp("2024-01-02 00:00", tz="Asia/Taipei")
+        assert len(guting) == 24
 
-    def test_negative_and_empty_values_become_nan(self, raw_records):
+    def test_pivots_items_to_canonical_columns(self, raw_records):
         df = records_to_frame(raw_records)
-        banqiao = df[df["station"] == "板橋"].iloc[0]
-        assert np.isnan(banqiao["pm25"])
-        assert np.isnan(banqiao["pm10"])
-        assert np.isnan(banqiao["o3"])
+        for col in ["station", "time", "pm25", "pm10", "no2", "o3", "wind_speed", "wind_dir"]:
+            assert col in df.columns
+        assert "AMB_TEMP" not in df.columns
+        row = df[(df["station"] == "古亭") & (df["time"].dt.hour == 2)].iloc[0]
+        assert row["pm25"] == 1.0 and row["wind_speed"] == 1.0
+
+    def test_invalid_flags_and_negatives_become_nan(self, raw_records):
+        df = records_to_frame(raw_records)
+        first = df[df["station"] == "古亭"].iloc[0]
+        assert np.isnan(first["pm25"]) and np.isnan(first["no2"])
+        assert np.isnan(df[df["station"] == "板橋"].iloc[0]["pm25"])
+
+    def test_missing_items_become_nan_columns(self, raw_records):
+        df = records_to_frame([r for r in raw_records if r["sitename"] == "板橋"])
+        assert df["o3"].isna().all()
+
+    def test_duplicate_records_merge_first_non_null(self, raw_records):
+        empty = daily_record("古亭", "PM10", "2024-01-01", [None] * 24)
+        df = records_to_frame([empty, *raw_records])
+        assert df[df["station"] == "古亭"]["pm10"].iloc[0] == 20.0
 
     def test_time_is_tz_aware_taipei(self, raw_records):
         df = records_to_frame(raw_records)
         assert str(df["time"].dt.tz) == "Asia/Taipei"
 
-    def test_renames_columns_to_canonical(self, raw_records):
-        df = records_to_frame(raw_records)
-        for col in ["station", "time", "pm25", "pm10", "no2", "o3", "wind_speed", "wind_dir"]:
-            assert col in df.columns
-
-    def test_drops_duplicate_station_hours(self, raw_records):
-        df = records_to_frame(raw_records + [raw_records[0]])
-        assert len(df) == 3
-
     def test_missing_column_raises(self):
         with pytest.raises(ValueError, match="missing"):
-            records_to_frame([{"sitename": "古亭", "datacreationdate": "2024-01-01 00:00"}])
+            records_to_frame([{"sitename": "古亭", "monitordate": "2024-01-01"}])
 
     def test_empty_records_raise(self):
         with pytest.raises(ValueError):

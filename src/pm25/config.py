@@ -3,8 +3,13 @@
 TIMEZONE = "Asia/Taipei"
 
 MOENV_API_BASE = "https://data.moenv.gov.tw/api/v2"
-MOENV_DATASET = "aqx_p_488"
+# aqx_p_13: hourly station values, one record per (station, item, day), back to 2013.
+# aqx_p_488 lacks hourly PM10/O3 before 2025-04, so it is not used.
+MOENV_DATASET = "aqx_p_13"
 MOENV_API_KEY_ENV = "MOENV_API_KEY"
+
+RAW_DATA_DIR = "data/raw"
+PROCESSED_DATA_DIR = "data/processed"
 
 # Station selection: 3 stations per air-quality region named in the proposal.
 STATIONS = {
@@ -14,24 +19,19 @@ STATIONS = {
     "kaoping": ("前金", "小港", "屏東"),
 }
 
-# Raw API field -> canonical column name.
-RAW_COLUMNS = {
-    "sitename": "station",
-    "datacreationdate": "time",
-    "pm2.5": "pm25",
-    "pm10": "pm10",
-    "no2": "no2",
-    "o3": "o3",
-    "windspeed": "wind_speed",
-    "winddirec": "wind_dir",
+# aqx_p_13 item code -> canonical column name.
+ITEMS = {
+    "PM2.5": "pm25",
+    "PM10": "pm10",
+    "NO2": "no2",
+    "O3": "o3",
+    "WIND_SPEED": "wind_speed",
+    "WIND_DIREC": "wind_dir",
 }
 TARGET = "pm25"
-MEASUREMENTS = ("pm25", "pm10", "no2", "o3", "wind_speed", "wind_dir")
+MEASUREMENTS = tuple(ITEMS.values())
 COVARIATES = ("pm10", "no2", "o3", "wind_speed", "wind_sin", "wind_cos")
 WIND_COVARIATES = ("wind_speed", "wind_sin", "wind_cos")
-
-RAW_DATA_DIR = "data/raw"
-PROCESSED_DATA_DIR = "data/processed"
 
 MAX_INTERP_GAP_HOURS = 3
 
