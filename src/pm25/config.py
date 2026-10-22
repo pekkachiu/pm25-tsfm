@@ -11,6 +11,8 @@ MOENV_API_KEY_ENV = "MOENV_API_KEY"
 RAW_DATA_DIR = "data/raw"
 PROCESSED_DATA_DIR = "data/processed"
 PREDICTIONS_DIR = "results/predictions"
+TABLES_DIR = "results/tables"
+FIGURES_DIR = "results/figures"
 
 # Station selection: 3 stations per air-quality region named in the proposal.
 STATIONS = {
@@ -51,3 +53,8 @@ QUANTILE_LEVELS = (0.1, 0.5, 0.9)  # 80% prediction interval + median
 # PM2.5 concentration (ug/m3) at which Taiwan's AQI exceeds 100.
 # TODO: verify against the current MOENV AQI breakpoint table before final runs.
 PM25_AQI100_THRESHOLD = 30.5
+
+# Northeast-monsoon season (wind-driven episodes, E2) vs the rest of the year.
+AUTUMN_WINTER_MONTHS = (10, 11, 12, 1, 2, 3)
+
+ADWIN_DELTA = 0.002  # river's default confidence for ADWIN
