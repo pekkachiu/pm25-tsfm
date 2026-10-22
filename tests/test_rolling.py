@@ -53,3 +53,28 @@ def test_invalid_args_raise(series):
         make_windows(series, context_length=0, horizon=1)
     with pytest.raises(ValueError):
         make_windows(series, context_length=1, horizon=0)
+
+
+def test_required_recent_hours_allows_older_context_gaps(series):
+    s = series.copy()
+    s.loc["2025-01-05 03:00"] = np.nan
+    wins = make_windows(s, context_length=48, horizon=24, origin_hours=(0,),
+                        required_recent_hours=12)
+    origins = {w.origin for w in wins}
+    # gap is 45h before 2025-01-07 00:00: outside the last 12h, so the window is kept
+    assert pd.Timestamp("2025-01-07", tz="Asia/Taipei") in origins
+    # gap falls inside the target of 2025-01-05 00:00: still dropped
+    assert pd.Timestamp("2025-01-05", tz="Asia/Taipei") not in origins
+
+
+def test_required_recent_hours_drops_recent_gaps(series):
+    s = series.copy()
+    s.loc["2025-01-06 20:00"] = np.nan
+    wins = make_windows(s, context_length=48, horizon=1, origin_hours=(0,),
+                        required_recent_hours=12)
+    assert pd.Timestamp("2025-01-07", tz="Asia/Taipei") not in {w.origin for w in wins}
+
+
+def test_required_recent_hours_must_fit_context(series):
+    with pytest.raises(ValueError):
+        make_windows(series, context_length=24, horizon=1, required_recent_hours=48)

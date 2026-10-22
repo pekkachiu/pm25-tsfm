@@ -40,7 +40,10 @@ TEST_YEAR = 2025
 
 HORIZONS = (1, 6, 24)
 CONTEXT_LENGTH = 512
-ORIGIN_HOURS = (0,)
+ORIGIN_HOURS = tuple(range(24))  # a rolling origin every hour
+# Windows need a complete target and complete last 48h of context (XGBoost lag range);
+# older context gaps stay NaN (Chronos handles them natively).
+REQUIRED_RECENT_HOURS = 48
 QUANTILE_LEVELS = (0.1, 0.5, 0.9)  # 80% prediction interval + median
 
 # PM2.5 concentration (ug/m3) at which Taiwan's AQI exceeds 100.
