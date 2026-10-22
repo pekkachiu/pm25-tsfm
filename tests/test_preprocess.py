@@ -47,6 +47,11 @@ class TestRecordsToFrame:
         df = records_to_frame(raw_records)
         assert str(df["time"].dt.tz) == "Asia/Taipei"
 
+    def test_unparseable_dates_raise_instead_of_dropping(self, raw_records):
+        bad = daily_record("古亭", "PM2.5", "2024/01/02", ["1"] * 24)
+        with pytest.raises(ValueError, match="2024/01/02"):
+            records_to_frame([*raw_records, bad])
+
     def test_missing_column_raises(self):
         with pytest.raises(ValueError, match="missing"):
             records_to_frame([{"sitename": "古亭", "monitordate": "2024-01-01"}])

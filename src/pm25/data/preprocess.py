@@ -24,7 +24,11 @@ def records_to_frame(records: list[dict]) -> pd.DataFrame:
     relevant = raw[raw["itemengname"].isin(ITEMS)]
     long = relevant.melt(id_vars=["sitename", "itemengname", "monitordate"],
                          value_vars=HOUR_COLUMNS, var_name="hour", value_name="value")
-    day = pd.to_datetime(long["monitordate"].astype(str).str.strip(), errors="coerce")
+    dates = long["monitordate"].astype(str).str.strip()
+    day = pd.to_datetime(dates, format="%Y-%m-%d", errors="coerce")
+    unparsed = dates[day.isna()].unique()
+    if unparsed.size:
+        raise ValueError(f"unparseable monitordate values: {list(unparsed[:5])}")
     hour_ending = pd.to_timedelta(long["hour"].str[-2:].astype(int) + 1, unit="h")
     value = pd.to_numeric(long["value"], errors="coerce")
     tidy = pd.DataFrame({
@@ -32,7 +36,7 @@ def records_to_frame(records: list[dict]) -> pd.DataFrame:
         "time": (day + hour_ending).dt.tz_localize(TIMEZONE),
         "item": long["itemengname"].map(ITEMS),
         "value": value.where(value >= 0),
-    }).dropna(subset=["time"])
+    })
     # Duplicate records never disagree on non-null values, so keep the first non-null.
     wide = tidy.pivot_table(index=["station", "time"], columns="item", values="value",
                             aggfunc="first", dropna=False)
