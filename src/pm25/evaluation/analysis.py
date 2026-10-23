@@ -109,6 +109,13 @@ def recovery_times(drift: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["station", "model", "lead", "start", "hours"])
 
 
+def station_summary(df: pd.DataFrame, year: int, threshold: float) -> dict:
+    """Mean PM2.5, exceedance hours and missing fraction of one station in one year."""
+    pm25 = df.loc[df.index.year == year, "pm25"]
+    return {"mean": pm25.mean(), "exceed_hours": int((pm25 >= threshold).sum()),
+            "missing": pm25.isna().mean()}
+
+
 def main() -> None:  # pragma: no cover - file IO entry point
     from pm25.evaluation.report import load_predictions, score_table
 

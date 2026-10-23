@@ -92,3 +92,14 @@ def test_recovery_times_pairs_up_and_down_changes():
     # up at 01-02 (3->6) recovers at 01-04 (6->2): 48 h; up at 01-05 never recovers
     assert list(out["hours"]) == [48.0]
     assert out.iloc[0]["model"] == "a"
+
+
+def test_station_summary_counts_exceedances_and_missing():
+    from pm25.evaluation.analysis import station_summary
+
+    idx = pd.date_range("2024-12-31 22:00", periods=6, freq="h", tz="Asia/Taipei")
+    df = pd.DataFrame({"pm25": [99.0, 99.0, 10.0, 40.0, np.nan, 31.0]}, index=idx)
+    out = station_summary(df, year=2025, threshold=30.5)
+    assert out["mean"] == pytest.approx(27.0)
+    assert out["exceed_hours"] == 2
+    assert out["missing"] == pytest.approx(0.25)

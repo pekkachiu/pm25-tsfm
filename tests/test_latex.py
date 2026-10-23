@@ -84,3 +84,15 @@ def test_dm_and_recovery_tables():
     recovery = pd.DataFrame({"model": ["xgboost"], "lead": [24], "median": [30.0],
                              "mean": [40.0], "count": [7]})
     assert "XGBoost & 30 & 7" in recovery_table(recovery, lead=24)
+
+
+def test_stations_and_nwp_tables():
+    from pm25.evaluation.latex import nwp_table, stations_table
+
+    summary = pd.DataFrame({"region": ["northern"], "station": ["古亭"], "mean": [10.68],
+                            "exceed_hours": [228], "missing": [0.008]})
+    tex = stations_table(summary)
+    assert "North & Guting & 10.7 & 228 & 0.8\\%" in tex
+    skill = pd.DataFrame({"station": ["古亭"], "corr": [0.54], "obs_mean": [1.47],
+                          "fc_mean": [2.33], "dir_error": [28.0], "hours": [8700]})
+    assert "Guting & 0.54 & 1.47 & 2.33 & 28" in nwp_table(skill)

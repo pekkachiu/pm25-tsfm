@@ -82,3 +82,18 @@ def test_every_station_has_english_name():
     from pm25.config import STATION_EN
 
     assert set(STATION_EN) == set(STATION_COORDS)
+
+
+def test_wind_forecast_skill_summary():
+    from pm25.data.wind_forecast import wind_forecast_skill
+
+    idx = pd.date_range("2025-01-01", periods=4, freq="h", tz="Asia/Taipei")
+    obs = pd.DataFrame({"wind_speed": [1.0, 2.0, 3.0, 4.0], "wind_sin": [0.0] * 4,
+                        "wind_cos": [1.0] * 4}, index=idx)
+    fc = pd.DataFrame({"fc_wind_speed": [2.0, 3.0, 4.0, np.nan], "fc_wind_sin": [1.0] * 4,
+                       "fc_wind_cos": [0.0] * 4}, index=idx)
+    skill = wind_forecast_skill(obs, fc)
+    assert skill["corr"] == pytest.approx(1.0)
+    assert skill["obs_mean"] == pytest.approx(2.0) and skill["fc_mean"] == pytest.approx(3.0)
+    assert skill["dir_error"] == pytest.approx(90.0)
+    assert skill["hours"] == 3

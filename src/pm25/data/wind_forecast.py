@@ -64,6 +64,17 @@ def attach_wind_forecast(df: pd.DataFrame, forecast: pd.DataFrame) -> pd.DataFra
     return df.join(forecast.reindex(df.index))
 
 
+def wind_forecast_skill(observed: pd.DataFrame, forecast: pd.DataFrame) -> dict:
+    """Agreement of forecast with observed wind over hours where both speeds exist."""
+    both = observed.join(forecast, how="inner").dropna(subset=["wind_speed", "fc_wind_speed"])
+    cross = both["wind_sin"] * both["fc_wind_cos"] - both["wind_cos"] * both["fc_wind_sin"]
+    dot = both["wind_sin"] * both["fc_wind_sin"] + both["wind_cos"] * both["fc_wind_cos"]
+    return {"corr": both["wind_speed"].corr(both["fc_wind_speed"]),
+            "obs_mean": both["wind_speed"].mean(), "fc_mean": both["fc_wind_speed"].mean(),
+            "dir_error": float(np.abs(np.degrees(np.arctan2(cross, dot))).median()),
+            "hours": len(both)}
+
+
 def main() -> None:  # pragma: no cover - network entry point
     out = Path(WIND_FORECAST_DIR)
     out.mkdir(parents=True, exist_ok=True)

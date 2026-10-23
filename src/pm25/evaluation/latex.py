@@ -7,7 +7,17 @@ from pathlib import Path
 
 import pandas as pd
 
-from pm25.config import HORIZONS, REPORT_TABLES_DIR, STATIONS, TABLES_DIR
+from pm25.config import (
+    HORIZONS,
+    PM25_AQI100_THRESHOLD,
+    PROCESSED_DATA_DIR,
+    REPORT_TABLES_DIR,
+    STATION_EN,
+    STATIONS,
+    TABLES_DIR,
+    TEST_YEAR,
+    WIND_FORECAST_DIR,
+)
 
 MODEL_LABELS = {
     "persistence": "Persistence",
@@ -131,6 +141,48 @@ def recovery_table(recovery: pd.DataFrame, lead: int) -> str:
     return tabular(body, ["Model", "Median (h)", "Episodes"], "lrr")
 
 
+def stations_table(summary: pd.DataFrame) -> str:
+    body = pd.DataFrame({
+        "station": [STATION_EN[s] for s in summary["station"]],
+        "mean": [f"{v:.1f}" for v in summary["mean"]],
+        "exceed": [str(v) for v in summary["exceed_hours"]],
+        "missing": [f"{100 * v:.1f}\\%" for v in summary["missing"]],
+    }, index=[REGION_LABELS[r] for r in summary["region"]])
+    return tabular(body, ["Region", "Station", "Mean", "Exceed. h", "Missing"], "llrrr")
+
+
+def nwp_table(skill: pd.DataFrame) -> str:
+    body = pd.DataFrame({
+        "corr": [f"{v:.2f}" for v in skill["corr"]],
+        "obs": [f"{v:.2f}" for v in skill["obs_mean"]],
+        "fc": [f"{v:.2f}" for v in skill["fc_mean"]],
+        "dir": [f"{v:.0f}" for v in skill["dir_error"]],
+    }, index=[STATION_EN[s] for s in skill["station"]])
+    return tabular(body, ["Station", "Corr.", "Obs.", "NWP", "Dir. err."], "lrrrr")
+
+
+def _data_tables() -> dict[str, str]:  # pragma: no cover - reads data directories
+    from pm25.data.io import read_station
+    from pm25.data.wind_forecast import wind_forecast_skill
+    from pm25.evaluation.analysis import station_summary
+
+    summary, skill = [], []
+    for region, group in STATIONS.items():
+        for station in group:
+            df = read_station(Path(PROCESSED_DATA_DIR), station)
+            summary.append({"region": region, "station": station,
+                            **station_summary(df, TEST_YEAR, PM25_AQI100_THRESHOLD)})
+            fc_path = Path(WIND_FORECAST_DIR) / f"{station}.csv.gz"
+            if fc_path.exists():
+                test = df[df.index.year == TEST_YEAR]
+                skill.append({"station": station, **wind_forecast_skill(
+                    test, read_station(Path(WIND_FORECAST_DIR), station))})
+    tables = {"stations": stations_table(pd.DataFrame(summary))}
+    if skill:
+        tables["nwp"] = nwp_table(pd.DataFrame(skill))
+    return tables
+
+
 def main() -> None:  # pragma: no cover - file IO entry point
     src, out = Path(TABLES_DIR), Path(REPORT_TABLES_DIR)
     out.mkdir(parents=True, exist_ok=True)
@@ -142,6 +194,7 @@ def main() -> None:  # pragma: no cover - file IO entry point
         "region": region_table(read("by_region"), lead),
         "dm": dm_table(read("dm_tests"), read("station_wins"), lead),
         "recovery": recovery_table(read("recovery"), lead),
+        **_data_tables(),
     }
     for name, tex in tables.items():
         (out / f"{name}.tex").write_text(tex)
