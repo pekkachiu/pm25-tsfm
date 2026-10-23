@@ -85,3 +85,18 @@ def test_detect_drift_stable_stream_has_no_changes():
     preds = _preds(n=n)
     preds = preds.assign(q50=preds["y"] + np.random.default_rng(1).normal(0, 0.3, n))
     assert detect_drift(preds).empty
+
+
+def test_score_table_q90_alert_catches_underpredicted_peaks():
+    y = np.where(np.arange(48) % 2 == 0, 40.0, 10.0)
+    preds = _preds(y=y).assign(q50=20.0, q90=np.where(y > 30, 35.0, 15.0))
+    row = score_table(preds).iloc[0]
+    assert row["recall"] == 0.0
+    assert row["alert_recall"] == 1.0
+    assert row["alert_precision"] == pytest.approx(1.0)
+    assert {"alert_f1"} <= set(score_table(preds).columns)
+
+
+def test_score_table_point_forecast_has_no_coverage():
+    preds = _preds().assign(q10=lambda d: d["q50"], q90=lambda d: d["q50"])
+    assert np.isnan(score_table(preds).iloc[0]["coverage80"])

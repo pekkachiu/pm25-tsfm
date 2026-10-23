@@ -43,13 +43,24 @@ def add_context_columns(preds: pd.DataFrame,
     )
 
 
+def _coverage(group: pd.DataFrame) -> float:
+    """Interval coverage; NaN for point forecasts (e.g. persistence) with zero-width intervals."""
+    if (group["q90"] - group["q10"]).abs().max() == 0:
+        return float("nan")
+    return interval_coverage(group["y"], group["q10"], group["q90"])
+
+
 def _scores(group: pd.DataFrame, threshold: float) -> pd.Series:
     exceed = exceedance_scores(group["y"], group["q50"], threshold)
+    # Alert rule on the upper quantile: the median under-predicts peaks at long leads.
+    alert = exceedance_scores(group["y"], group["q90"], threshold)
     return pd.Series({
         "mae": mae(group["y"], group["q50"]),
         "rmse": rmse(group["y"], group["q50"]),
-        "coverage80": interval_coverage(group["y"], group["q10"], group["q90"]),
+        "coverage80": _coverage(group),
         "precision": exceed["precision"], "recall": exceed["recall"], "f1": exceed["f1"],
+        "alert_precision": alert["precision"], "alert_recall": alert["recall"],
+        "alert_f1": alert["f1"],
         "n": len(group),
     })
 
