@@ -4,6 +4,10 @@ __pycache__/
 .pytest_cache/
 .coverage
 .env
-data/raw/
+data/raw*/
 data/processed/
 results/
+dist/
+data/wind_forecast/
+HW/
+.DS_Store

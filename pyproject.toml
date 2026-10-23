@@ -2,7 +2,7 @@
 name = "pm25-tsfm"
 version = "0.1.0"
 description = "Covariate-informed zero-shot PM2.5 forecasting in Taiwan with Chronos-Bolt / Chronos-2"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "numpy>=1.26",
     "pandas>=2.2",
@@ -14,6 +14,7 @@ models = [
     "chronos-forecasting>=2.0",
     "torch>=2.2",
     "xgboost>=2.0",
+    "scikit-learn>=1.4",
     "river>=0.21",
     "matplotlib>=3.8",
 ]
