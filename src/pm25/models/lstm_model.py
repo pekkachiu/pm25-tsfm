@@ -12,6 +12,7 @@ from torch import nn
 
 from pm25.config import COVARIATES, HORIZONS, QUANTILE_LEVELS, TARGET
 from pm25.evaluation.rolling import ForecastInput
+from pm25.models.device import default_device
 from pm25.models.features import LAGS
 
 VALIDATION_FRACTION = 0.1
@@ -60,6 +61,7 @@ class LSTMModel:
         self._seed = seed
         self._net: _Net | None = None
         self._mean = self._std = None
+        self._device = None
 
     def _scaled_steps(self, frame: pd.DataFrame) -> np.ndarray:
         """(time, channels) with numeric channels standardised and NaN set to 0."""
@@ -84,8 +86,9 @@ class LSTMModel:
         total = 0.0
         for start in range(0, len(x), self._batch_size):
             idx = order[start:start + self._batch_size]
+            xb, yb = x[idx].to(self._device), y[idx].to(self._device)
             with torch.set_grad_enabled(train):
-                loss = pinball_loss(net(x[idx]), y[idx], q)
+                loss = pinball_loss(net(xb), yb, q)
             if train:
                 optimiser.zero_grad()
                 loss.backward()
@@ -96,13 +99,15 @@ class LSTMModel:
     def fit(self, train: pd.DataFrame) -> "LSTMModel":
         """Train with early stopping on the chronologically last 10% of `train`."""
         torch.manual_seed(self._seed)
+        self._device = torch.device(default_device())
         numeric = train[list(self._columns)].to_numpy(dtype=float)
         self._mean = np.nanmean(numeric, axis=0)
         self._std = np.nanstd(numeric, axis=0) + 1e-6
         x, y = self._training_tensors(train)
         split = int(len(x) * (1 - VALIDATION_FRACTION))
-        q = torch.tensor(self._quantiles, dtype=torch.float32)
-        net = _Net(x.shape[-1], self._hidden_size, len(self._leads), len(self._quantiles))
+        q = torch.tensor(self._quantiles, dtype=torch.float32, device=self._device)
+        net = _Net(x.shape[-1], self._hidden_size, len(self._leads),
+                   len(self._quantiles)).to(self._device)
         optimiser = torch.optim.Adam(net.parameters(), lr=self._lr)
         best, best_state, stale = float("inf"), None, 0
         for _ in range(self._max_epochs):
@@ -130,7 +135,9 @@ class LSTMModel:
             raise ValueError(f"trained lead {max(self._leads)} exceeds horizon {horizon}")
         x = torch.from_numpy(np.stack([self._scaled_steps(i.context.iloc[-LAGS:]) for i in inputs]))
         with torch.no_grad():
-            pred = self._net(x).numpy() * self._std[0] + self._mean[0]  # (n, lead, q)
+            pred = torch.cat([self._net(x[i:i + self._batch_size].to(self._device)).cpu()
+                              for i in range(0, len(x), self._batch_size)]).numpy()
+        pred = pred * self._std[0] + self._mean[0]  # (n, lead, q)
         out = np.full((len(inputs), len(quantile_levels), horizon), np.nan)
         for j, lead in enumerate(self._leads):
             out[:, :, lead - 1] = np.sort(pred[:, j, :], axis=1)

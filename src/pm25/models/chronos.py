@@ -1,12 +1,13 @@
 """Zero-shot Chronos-Bolt and Chronos-2 wrappers (no fine-tuning).
 
-Pipelines are loaded lazily on CPU unless one is injected (tests inject mocks).
+Pipelines are loaded lazily on `default_device()` unless one is injected (tests inject mocks).
 """
 
 import numpy as np
 
 from pm25.config import QUANTILE_LEVELS, TARGET
 from pm25.evaluation.rolling import ForecastInput
+from pm25.models.device import default_device
 
 BATCH_SIZE = 64
 
@@ -14,7 +15,7 @@ BATCH_SIZE = 64
 def _load(model_id: str):  # pragma: no cover - downloads model weights
     from chronos import BaseChronosPipeline
 
-    return BaseChronosPipeline.from_pretrained(model_id, device_map="cpu")
+    return BaseChronosPipeline.from_pretrained(model_id, device_map=default_device())
 
 
 class _LazyPipeline:
@@ -47,7 +48,7 @@ class ChronosBoltModel(_LazyPipeline):
         quantiles, _ = self.pipeline.predict_quantiles(
             context, prediction_length=horizon, quantile_levels=list(quantile_levels))
         # (batch, horizon, quantile) -> (batch, quantile, horizon)
-        return np.asarray(quantiles, dtype=float).transpose(0, 2, 1)
+        return np.asarray(quantiles.cpu(), dtype=float).transpose(0, 2, 1)
 
 
 class Chronos2Model(_LazyPipeline):
@@ -77,4 +78,4 @@ class Chronos2Model(_LazyPipeline):
             [self._to_dict(x) for x in inputs], prediction_length=horizon,
             quantile_levels=list(quantile_levels), batch_size=BATCH_SIZE)
         # each item: (n_variates=1, horizon, quantile) -> (quantile, horizon)
-        return np.stack([np.asarray(q, dtype=float)[0].T for q in quantiles])
+        return np.stack([np.asarray(q.cpu(), dtype=float)[0].T for q in quantiles])
