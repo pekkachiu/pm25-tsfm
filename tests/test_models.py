@@ -55,6 +55,18 @@ class TestChronosBolt:
         assert pipeline.predict_quantiles.call_args.kwargs["quantile_levels"] == list(QL)
 
 
+    def test_predicts_in_batches_to_bound_gpu_memory(self, monkeypatch):
+        monkeypatch.setattr("pm25.models.chronos.BOLT_BATCH_SIZE", 2)
+        pipeline = MagicMock()
+        pipeline.predict_quantiles.side_effect = lambda ctx, **kw: (
+            torch.full((len(ctx), 4, 3), float(ctx[0, -1])), None)
+        q = ChronosBoltModel("bolt", pipeline=pipeline).predict(_inputs(n=5), 4, QL)
+        assert pipeline.predict_quantiles.call_count == 3  # 2 + 2 + 1
+        assert [len(c.args[0]) for c in pipeline.predict_quantiles.call_args_list] == [2, 2, 1]
+        assert q.shape == (5, 3, 4)
+        np.testing.assert_array_equal(q[:, 0, 0], [7, 7, 9, 9, 11])  # each batch's first context
+
+
 class TestChronos2:
     def _pipeline(self, n=3, horizon=4):
         pipeline = MagicMock()

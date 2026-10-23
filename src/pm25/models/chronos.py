@@ -10,6 +10,8 @@ from pm25.evaluation.rolling import ForecastInput
 from pm25.models.device import default_device
 
 BATCH_SIZE = 64
+# Chronos-Bolt has no internal batching; one call with every origin exhausts GPU memory.
+BOLT_BATCH_SIZE = 256
 
 
 def _load(model_id: str):  # pragma: no cover - downloads model weights
@@ -45,10 +47,14 @@ class ChronosBoltModel(_LazyPipeline):
 
         context = torch.tensor(np.stack([x.context[TARGET].to_numpy() for x in inputs]),
                                dtype=torch.float32)
-        quantiles, _ = self.pipeline.predict_quantiles(
-            context, prediction_length=horizon, quantile_levels=list(quantile_levels))
+        batches = []
+        for start in range(0, len(context), BOLT_BATCH_SIZE):
+            quantiles, _ = self.pipeline.predict_quantiles(
+                context[start:start + BOLT_BATCH_SIZE], prediction_length=horizon,
+                quantile_levels=list(quantile_levels))
+            batches.append(np.asarray(quantiles.cpu(), dtype=float))
         # (batch, horizon, quantile) -> (batch, quantile, horizon)
-        return np.asarray(quantiles.cpu(), dtype=float).transpose(0, 2, 1)
+        return np.concatenate(batches).transpose(0, 2, 1)
 
 
 class Chronos2Model(_LazyPipeline):
