@@ -47,3 +47,40 @@ def test_exceedance_scores():
 def test_exceedance_no_positives_gives_zero_not_error():
     s = exceedance_scores(np.array([1.0, 2.0]), np.array([1.0, 2.0]), threshold=30.5)
     assert s["precision"] == 0.0 and s["recall"] == 0.0 and s["f1"] == 0.0
+
+
+def test_weighted_quantile_loss_matches_definition():
+    from pm25.evaluation.metrics import weighted_quantile_loss
+
+    y = np.array([10.0, 20.0])
+    preds = {0.1: np.array([8.0, 25.0]), 0.5: np.array([10.0, 20.0]),
+             0.9: np.array([12.0, 18.0])}
+    # pinball sums: q0.1 -> 0.1*2 + 0.9*5 = 4.7; q0.5 -> 0; q0.9 -> 0.1*2 + 0.9*2 = 2.0
+    expected = np.mean([2 * 4.7 / 30, 0.0, 2 * 2.0 / 30])
+    assert weighted_quantile_loss(y, preds) == pytest.approx(expected)
+
+
+def test_weighted_quantile_loss_point_forecast_equals_scaled_mae():
+    from pm25.evaluation.metrics import weighted_quantile_loss
+
+    y = np.array([10.0, 20.0, np.nan])
+    point = np.array([12.0, 17.0, 5.0])
+    wql = weighted_quantile_loss(y, {0.5: point})
+    assert wql == pytest.approx(2 * 0.5 * 5.0 / 30)
+
+
+def test_interval_score_penalises_width_and_misses():
+    from pm25.evaluation.metrics import interval_score
+
+    y = np.array([5.0, 0.0, 12.0])
+    lo, hi = np.array([4.0, 2.0, 4.0]), np.array([6.0, 6.0, 10.0])
+    # widths 2, 4, 6; misses: below by 2, above by 2; penalty factor 2/alpha = 10
+    assert interval_score(y, lo, hi, alpha=0.2) == pytest.approx((2 + 24 + 26) / 3)
+
+
+def test_probabilistic_scores_are_nan_without_valid_pairs():
+    from pm25.evaluation.metrics import interval_score, weighted_quantile_loss
+
+    nan = np.array([np.nan])
+    assert np.isnan(weighted_quantile_loss(nan, {0.5: np.array([1.0])}))
+    assert np.isnan(interval_score(nan, np.array([0.0]), np.array([1.0]), alpha=0.2))

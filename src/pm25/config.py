@@ -87,6 +87,10 @@ AUTUMN_WINTER_MONTHS = (10, 11, 12, 1, 2, 3)
 
 ADWIN_DELTA = 0.002  # river's default confidence for ADWIN
 
+# Adaptive conformal inference: margin step in ug/m3 per observed outcome, fixed a priori
+# (not tuned on the test year). See pm25.evaluation.conformal.
+ACI_STEP = 0.05
+
 # Diebold-Mariano tests on absolute-error differentials (model, baseline). Hourly origins
 # overlap and PM2.5 errors persist for days, so the Newey-West lag is two days.
 DM_HAC_LAG = 48

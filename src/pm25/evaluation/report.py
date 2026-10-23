@@ -13,11 +13,22 @@ from pm25.config import (
     AUTUMN_WINTER_MONTHS,
     PM25_AQI100_THRESHOLD,
     PREDICTIONS_DIR,
+    QUANTILE_LEVELS,
     STATIONS,
     TABLES_DIR,
 )
 from pm25.data.io import read_predictions
-from pm25.evaluation.metrics import exceedance_scores, interval_coverage, mae, rmse
+from pm25.evaluation.metrics import (
+    exceedance_scores,
+    interval_coverage,
+    interval_score,
+    mae,
+    rmse,
+    weighted_quantile_loss,
+)
+
+# Miss rate of the central q10-q90 interval (0.2 for an 80% interval).
+INTERVAL_ALPHA = round(1 - (QUANTILE_LEVELS[-1] - QUANTILE_LEVELS[0]), 10)
 
 REGION_OF = {station: region for region, group in STATIONS.items() for station in group}
 
@@ -61,6 +72,10 @@ def _scores(group: pd.DataFrame, threshold: float) -> pd.Series:
         "precision": exceed["precision"], "recall": exceed["recall"], "f1": exceed["f1"],
         "alert_precision": alert["precision"], "alert_recall": alert["recall"],
         "alert_f1": alert["f1"],
+        "wql": weighted_quantile_loss(
+            group["y"], {0.1: group["q10"], 0.5: group["q50"], 0.9: group["q90"]}),
+        "interval_score": interval_score(group["y"], group["q10"], group["q90"],
+                                         INTERVAL_ALPHA),
         "n": len(group),
     })
 

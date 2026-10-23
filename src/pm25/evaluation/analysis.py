@@ -9,7 +9,17 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from pm25.config import DM_HAC_LAG, DM_PAIRS, HORIZONS, PREDICTIONS_DIR, TABLES_DIR
+from pm25.config import (
+    ACI_STEP,
+    AUTUMN_WINTER_MONTHS,
+    DM_HAC_LAG,
+    DM_PAIRS,
+    HORIZONS,
+    PREDICTIONS_DIR,
+    TABLES_DIR,
+)
+from pm25.evaluation.conformal import adaptive_intervals
+from pm25.evaluation.metrics import interval_coverage, interval_score, weighted_quantile_loss
 
 SIGNIFICANCE_LEVEL = 0.05
 
@@ -109,6 +119,31 @@ def recovery_times(drift: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["station", "model", "lead", "start", "hours"])
 
 
+def _interval_scores(group: pd.DataFrame, alpha: float) -> dict:
+    y = group["y"]
+    return {
+        "coverage": interval_coverage(y, group["q10"], group["q90"]),
+        "width": float((group["q90"] - group["q10"]).mean()),
+        "interval_score": interval_score(y, group["q10"], group["q90"], alpha),
+        "wql": weighted_quantile_loss(
+            y, {0.1: group["q10"], 0.5: group["q50"], 0.9: group["q90"]}),
+    }
+
+
+def calibration_table(preds: pd.DataFrame, alpha: float = 0.2,
+                      step: float = ACI_STEP, by=("model", "lead")) -> pd.DataFrame:
+    """Coverage, mean width, interval score and wQL before (_raw) and after (_aci) ACI."""
+    adjusted = adaptive_intervals(preds, alpha, step)
+    rows = []
+    for key, raw in preds.groupby(list(by)):
+        aci = adjusted.loc[raw.index]
+        row = dict(zip(by, key if isinstance(key, tuple) else (key,)))
+        for suffix, frame in (("raw", raw), ("aci", aci)):
+            row |= {f"{k}_{suffix}": v for k, v in _interval_scores(frame, alpha).items()}
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def station_summary(df: pd.DataFrame, year: int, threshold: float) -> dict:
     """Mean PM2.5, exceedance hours and missing fraction of one station in one year."""
     pm25 = df.loc[df.index.year == year, "pm25"]
@@ -127,6 +162,11 @@ def main() -> None:  # pragma: no cover - file IO entry point
         "dm_tests": pairwise_tests(preds),
         "station_wins": station_wins(preds),
         "by_station": score_table(preds, by=("station", "model", "lead")),
+        "calibration": calibration_table(preds),
+        "calibration_by_season": calibration_table(
+            preds.assign(season=np.where(preds["target_time"].dt.month.isin(
+                AUTUMN_WINTER_MONTHS), "autumn_winter", "spring_summer")),
+            by=("season", "model", "lead")),
         "recovery": (recovery_times(drift).groupby(["model", "lead"])["hours"]
                      .agg(["median", "mean", "count"]).reset_index()),
     }
