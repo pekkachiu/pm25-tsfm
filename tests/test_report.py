@@ -100,3 +100,10 @@ def test_score_table_q90_alert_catches_underpredicted_peaks():
 def test_score_table_point_forecast_has_no_coverage():
     preds = _preds().assign(q10=lambda d: d["q50"], q90=lambda d: d["q50"])
     assert np.isnan(score_table(preds).iloc[0]["coverage80"])
+
+
+def test_score_table_includes_probabilistic_scores():
+    table = score_table(_preds("m", offset=1.0)).iloc[0]
+    assert table["wql"] > 0
+    # interval [y-4, y+6] always covers: score equals the width
+    assert table["interval_score"] == pytest.approx(10.0)

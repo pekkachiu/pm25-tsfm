@@ -103,3 +103,19 @@ def test_station_summary_counts_exceedances_and_missing():
     assert out["mean"] == pytest.approx(27.0)
     assert out["exceed_hours"] == 2
     assert out["missing"] == pytest.approx(0.25)
+
+
+def test_calibration_table_compares_raw_and_aci():
+    from pm25.evaluation.analysis import calibration_table
+
+    rng = np.random.default_rng(0)
+    n = 3000
+    preds = _preds("narrow", rng.normal(0, 1, n))  # q10 = q90 = y: point-like interval
+    preds = preds.assign(q10=preds["q50"] - 0.3, q90=preds["q50"] + 0.3)
+    table = calibration_table(preds, step=0.05).set_index(["model", "lead"])
+    row = table.loc[("narrow", 1)]
+    assert row["coverage_raw"] < 0.4
+    assert row["coverage_aci"] == pytest.approx(0.8, abs=0.05)
+    assert row["width_aci"] > row["width_raw"]
+    assert row["interval_score_aci"] < row["interval_score_raw"]
+    assert {"wql_raw", "wql_aci"} <= set(table.columns)
