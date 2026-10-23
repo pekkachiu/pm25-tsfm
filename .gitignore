@@ -9,9 +9,3 @@ data/processed/
 results/
 dist/
 data/wind_forecast/
-report/*.aux
-report/*.bbl
-report/*.blg
-report/*.log
-report/*.out
-report/*.synctex.gz

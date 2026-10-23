@@ -13,7 +13,6 @@ PROCESSED_DATA_DIR = "data/processed"
 PREDICTIONS_DIR = "results/predictions"
 TABLES_DIR = "results/tables"
 FIGURES_DIR = "results/figures"
-REPORT_TABLES_DIR = "report/tables"
 
 # Station selection: 3 stations per air-quality region named in the proposal.
 STATIONS = {
