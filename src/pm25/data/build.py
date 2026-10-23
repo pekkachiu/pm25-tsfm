@@ -15,6 +15,7 @@ from pm25.config import (
     TARGET,
     YEARS,
 )
+from pm25.data.io import write_station
 from pm25.data.preprocess import preprocess_station, records_to_frame
 
 
@@ -42,7 +43,7 @@ def main() -> None:  # pragma: no cover - file IO entry point
     reports = []
     for station in (s for group in STATIONS.values() for s in group):
         df = build_station(Path(RAW_DATA_DIR), station)
-        df.to_pickle(out_dir / f"{station}.pkl")
+        write_station(df, out_dir, station)
         reports.append(missing_report(df).assign(station=station))
     summary = pd.concat(reports).reset_index(names="year")
     summary.to_csv(out_dir / "missing_report.csv", index=False)

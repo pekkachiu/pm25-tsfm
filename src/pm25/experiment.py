@@ -25,6 +25,7 @@ from pm25.config import (
     TEST_YEAR,
     WIND_COVARIATES,
 )
+from pm25.data.io import read_station, write_predictions
 from pm25.data.split import split_by_year
 from pm25.evaluation.rolling import build_inputs
 
@@ -83,7 +84,7 @@ def run_station(station: str, df: pd.DataFrame, models: list, out_dir: Path,
                          start=f"{test_year}-01-01", end=f"{test_year}-12-31 23:00")
     paths = []
     for model in models:
-        path = out_dir / f"{station}__{model.name}.pkl"
+        path = out_dir / f"{station}__{model.name}.csv.gz"
         paths.append(path)
         if path.exists():
             continue
@@ -91,8 +92,8 @@ def run_station(station: str, df: pd.DataFrame, models: list, out_dir: Path,
         if hasattr(model, "fit"):
             model.fit(train)
         quantiles = model.predict(batch.inputs, FORECAST_LENGTH, QUANTILE_LEVELS)
-        prediction_frame(station, model.name, batch.origins, batch.targets,
-                         quantiles).to_pickle(path)
+        write_predictions(prediction_frame(station, model.name, batch.origins,
+                                           batch.targets, quantiles), path)
         print(f"{station} {model.name}: {len(batch.origins)} origins, "
               f"{time.time() - started:.0f}s", flush=True)
     return paths
@@ -105,7 +106,7 @@ def main() -> None:  # pragma: no cover - CLI entry point
                         default=[s for group in STATIONS.values() for s in group])
     args = parser.parse_args()
     for station in args.stations:
-        df = pd.read_pickle(Path(PROCESSED_DATA_DIR) / f"{station}.pkl").drop(columns="station")
+        df = read_station(Path(PROCESSED_DATA_DIR), station).drop(columns="station")
         run_station(station, df, make_models(args.family), Path(PREDICTIONS_DIR))
 
 

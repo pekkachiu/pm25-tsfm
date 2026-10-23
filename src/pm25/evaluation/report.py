@@ -16,16 +16,17 @@ from pm25.config import (
     STATIONS,
     TABLES_DIR,
 )
+from pm25.data.io import read_predictions
 from pm25.evaluation.metrics import exceedance_scores, interval_coverage, mae, rmse
 
 REGION_OF = {station: region for region, group in STATIONS.items() for station in group}
 
 
 def load_predictions(directory: Path) -> pd.DataFrame:
-    paths = sorted(Path(directory).glob("*.pkl"))
+    paths = sorted(Path(directory).glob("*.csv.gz"))
     if not paths:
         raise FileNotFoundError(f"no prediction files in {directory}")
-    return pd.concat([pd.read_pickle(p) for p in paths], ignore_index=True)
+    return pd.concat([read_predictions(p) for p in paths], ignore_index=True)
 
 
 def add_context_columns(preds: pd.DataFrame,

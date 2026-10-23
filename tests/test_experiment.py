@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from pm25.data.io import read_predictions
 from pm25.experiment import make_models, prediction_frame, run_station
 from pm25.models.persistence import PersistenceModel
 
@@ -28,8 +29,8 @@ def test_prediction_frame_long_format():
 def test_run_station_writes_and_skips_existing(station_frame, tmp_path):
     paths = run_station("古亭", station_frame, [PersistenceModel()], tmp_path,
                         test_year=2025, context_length=48)
-    assert [p.name for p in paths] == ["古亭__persistence.pkl"]
-    preds = pd.read_pickle(paths[0])
+    assert [p.name for p in paths] == ["古亭__persistence.csv.gz"]
+    preds = read_predictions(paths[0])
     assert preds["origin"].min().year == 2025
     assert np.allclose(preds["q50"], preds["q10"])  # persistence is a point forecast
     mtime = paths[0].stat().st_mtime

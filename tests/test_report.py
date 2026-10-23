@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from pm25.data.io import write_predictions
 from pm25.evaluation.report import (
     add_context_columns,
     detect_drift,
@@ -22,8 +23,8 @@ def _preds(model="m", station="古亭", n=48, offset=0.0, y=None):
 
 
 def test_load_predictions_concatenates(tmp_path):
-    _preds("a").to_pickle(tmp_path / "古亭__a.pkl")
-    _preds("b").to_pickle(tmp_path / "古亭__b.pkl")
+    write_predictions(_preds("a"), tmp_path / "古亭__a.csv.gz")
+    write_predictions(_preds("b"), tmp_path / "古亭__b.csv.gz")
     out = load_predictions(tmp_path)
     assert sorted(out["model"].unique()) == ["a", "b"]
 
