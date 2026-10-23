@@ -24,12 +24,15 @@ from pm25.config import (
     STATIONS,
     TEST_YEAR,
     WIND_COVARIATES,
+    WIND_FORECAST_COVARIATES,
+    WIND_FORECAST_DIR,
 )
 from pm25.data.io import read_station, write_predictions
 from pm25.data.split import split_by_year
+from pm25.data.wind_forecast import attach_wind_forecast
 from pm25.evaluation.rolling import build_inputs
 
-FAMILIES = ("baseline", "xgboost", "lstm", "chronos")
+FAMILIES = ("baseline", "xgboost", "lstm", "chronos", "wind_forecast")
 
 
 def make_models(family: str) -> list:
@@ -53,6 +56,12 @@ def make_models(family: str) -> list:
             Chronos2Model("chronos2_wind_oracle", "amazon/chronos-2",
                           past_covariates=COVARIATES, future_covariates=WIND_COVARIATES),
         ]
+    if family == "wind_forecast":
+        from pm25.models.chronos import Chronos2Model
+        # Same as the oracle, but future wind comes from day-ahead NWP forecasts.
+        return [Chronos2Model("chronos2_wind_forecast", "amazon/chronos-2",
+                              past_covariates=COVARIATES + WIND_FORECAST_COVARIATES,
+                              future_covariates=WIND_FORECAST_COVARIATES)]
     raise ValueError(f"unknown family {family!r}; choose from {FAMILIES}")
 
 
@@ -107,6 +116,8 @@ def main() -> None:  # pragma: no cover - CLI entry point
     args = parser.parse_args()
     for station in args.stations:
         df = read_station(Path(PROCESSED_DATA_DIR), station).drop(columns="station")
+        if args.family == "wind_forecast":
+            df = attach_wind_forecast(df, read_station(Path(WIND_FORECAST_DIR), station))
         run_station(station, df, make_models(args.family), Path(PREDICTIONS_DIR))
 
 

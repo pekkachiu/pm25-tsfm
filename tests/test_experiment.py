@@ -59,3 +59,8 @@ def test_make_models_rejects_unknown_family():
 
 def test_make_models_baseline():
     assert [m.name for m in make_models("baseline")] == ["persistence"]
+
+
+def test_make_models_wind_forecast_family_is_lazy():
+    models = make_models("wind_forecast")
+    assert [m.name for m in models] == ["chronos2_wind_forecast"]

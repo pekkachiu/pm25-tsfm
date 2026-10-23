@@ -22,6 +22,23 @@ STATIONS = {
     "kaoping": ("前金", "小港", "屏東"),
 }
 
+# (latitude, longitude) from MOENV aqx_p_07 station metadata (TWD97 = WGS84 to ~1 m).
+STATION_COORDS = {
+    "古亭": (25.020608, 121.529556), "板橋": (25.012972, 121.458667),
+    "桃園": (24.994711, 121.305005), "忠明": (24.151958, 120.641092),
+    "西屯": (24.162197, 120.616917), "彰化": (24.066000, 120.541519),
+    "斗六": (23.711853, 120.544994), "嘉義": (23.464779, 120.441251),
+    "臺南": (22.989283, 120.219479), "前金": (22.633903, 120.286761),
+    "小港": (22.565833, 120.337736), "屏東": (22.673081, 120.488033),
+}
+
+# Realistic future wind: Open-Meteo archived NWP runs, value issued 24 h before valid time
+# (previous_day1), so every forecast for origin+1..+24 h was published by the origin.
+OPEN_METEO_PREVIOUS_RUNS_URL = "https://previous-runs-api.open-meteo.com/v1/forecast"
+WIND_FORECAST_DIR = "data/wind_forecast"
+WIND_FORECAST_START = "2024-12-01"  # covers the 512 h context of the first 2025 origin
+WIND_FORECAST_COVARIATES = ("fc_wind_speed", "fc_wind_sin", "fc_wind_cos")
+
 # aqx_p_13 item code -> canonical column name.
 ITEMS = {
     "PM2.5": "pm25",
@@ -50,8 +67,8 @@ ORIGIN_HOURS = tuple(range(24))  # a rolling origin every hour
 REQUIRED_RECENT_HOURS = 48
 QUANTILE_LEVELS = (0.1, 0.5, 0.9)  # 80% prediction interval + median
 
-# PM2.5 concentration (ug/m3) at which Taiwan's AQI exceeds 100.
-# TODO: verify against the current MOENV AQI breakpoint table before final runs.
+# Lower bound of AQI 101-150 for PM2.5 in MOENV's AQI table effective 2025-01-01
+# (airtw.moenv.gov.tw AirQualityIndicatorNew); applied here to hourly concentrations.
 PM25_AQI100_THRESHOLD = 30.5
 
 # Northeast-monsoon season (wind-driven episodes, E2) vs the rest of the year.
