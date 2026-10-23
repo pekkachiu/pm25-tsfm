@@ -89,3 +89,19 @@ def test_future_covariates_help_when_target_depends_on_future(rng):
     err = lambda m: np.abs(m.predict(batch.inputs, 6)[:, 1, 5] - batch.targets[:, 5]).mean()  # noqa: E731
     assert nwp.name == "lstm_nwp" and plain.name == "lstm"
     assert err(nwp) < err(plain) / 2
+
+
+def test_training_and_prediction_future_layout_match():
+    """With several future covariates, the flattened training window for an origin must
+    equal the vector built at prediction time for the same origin."""
+    idx = pd.date_range("2023-01-01", periods=200, freq="h", tz="Asia/Taipei")
+    df = pd.DataFrame({"pm25": np.arange(200.0), "fc_a": np.arange(200.0),
+                       "fc_b": 1000 + np.arange(200.0)}, index=idx)
+    model = LSTMModel(leads=(1, 6), covariates=(), future_covariates=("fc_a", "fc_b"))
+    model._mean, model._std = np.array([0.0]), np.array([1.0])
+    model._future_mean, model._future_std = np.zeros(2), np.ones(2)
+    _, f_train, _ = model._training_tensors(df)
+    origin = 47 + 5  # sixth training origin (LAGS - 1 + 5)
+    future = df.iloc[origin + 1:origin + 1 + 6]
+    f_pred = model._scaled_future(future).reshape(-1)
+    assert np.array_equal(f_train[5].numpy(), f_pred)

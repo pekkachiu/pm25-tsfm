@@ -84,9 +84,11 @@ class LSTMModel:
         horizon = max(self._leads)
         n_origins = len(steps) - LAGS + 1 - horizon
         x = sliding_window_view(steps, LAGS, axis=0)[:n_origins]
-        # future window of origin LAGS-1+k covers rows LAGS+k .. LAGS+k+horizon-1
+        # future window of origin LAGS-1+k covers rows LAGS+k .. LAGS+k+horizon-1.
+        # sliding_window_view puts the window axis last; transpose to (origin, hour, channel)
+        # so the flattened layout matches the time-major vector built in predict().
         future = sliding_window_view(self._scaled_future(train), horizon, axis=0)[
-            LAGS:LAGS + n_origins].reshape(n_origins, -1)
+            LAGS:LAGS + n_origins].transpose(0, 2, 1).reshape(n_origins, -1)
         target = train[TARGET].to_numpy(dtype=float)
         y = np.stack([target[LAGS - 1 + lead:len(target) - horizon + lead]
                       for lead in self._leads], axis=1)
