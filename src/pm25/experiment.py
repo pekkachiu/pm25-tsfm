@@ -3,7 +3,9 @@
 Each model family runs in its own process because torch and xgboost cannot share one
 on macOS (see CLAUDE.md):
 
-    uv run python -m pm25.experiment --family baseline|xgboost|lstm|chronos [--stations ...]
+    uv run python -m pm25.experiment --family <family> [--stations ...]
+
+nwp_* families add day-ahead NWP wind (data/wind_forecast/<model>/) as future covariates.
 """
 
 import argparse
@@ -24,15 +26,22 @@ from pm25.config import (
     STATIONS,
     TEST_YEAR,
     WIND_COVARIATES,
+    PRIMARY_NWP,
     WIND_FORECAST_COVARIATES,
-    WIND_FORECAST_DIR,
 )
 from pm25.data.io import read_station, write_predictions
 from pm25.data.split import split_by_year
-from pm25.data.wind_forecast import attach_wind_forecast
+from pm25.data.wind_forecast import attach_wind_forecast, forecast_dir
 from pm25.evaluation.rolling import build_inputs
 
-FAMILIES = ("baseline", "xgboost", "lstm", "chronos", "wind_forecast")
+FAMILIES = ("baseline", "xgboost", "lstm", "chronos", "nwp_xgboost", "nwp_torch",
+            "nwp_bestmatch")
+# Families that need NWP wind, and the NWP model they read. best_match is archived only
+# from 2024, so it is limited to the zero-shot Chronos-2 sensitivity run.
+FAMILY_NWP = {"nwp_bestmatch": "best_match", "nwp_xgboost": PRIMARY_NWP,
+              "nwp_torch": PRIMARY_NWP}
+NWP_INPUTS = dict(past_covariates=COVARIATES + WIND_FORECAST_COVARIATES,
+                  future_covariates=WIND_FORECAST_COVARIATES)
 
 
 def make_models(family: str) -> list:
@@ -56,12 +65,17 @@ def make_models(family: str) -> list:
             Chronos2Model("chronos2_wind_oracle", "amazon/chronos-2",
                           past_covariates=COVARIATES, future_covariates=WIND_COVARIATES),
         ]
-    if family == "wind_forecast":
+    if family == "nwp_xgboost":
+        from pm25.models.xgboost_model import XGBoostModel
+        return [XGBoostModel(future_covariates=WIND_FORECAST_COVARIATES, name="xgboost_nwp")]
+    if family == "nwp_torch":
         from pm25.models.chronos import Chronos2Model
-        # Same as the oracle, but future wind comes from day-ahead NWP forecasts.
-        return [Chronos2Model("chronos2_wind_forecast", "amazon/chronos-2",
-                              past_covariates=COVARIATES + WIND_FORECAST_COVARIATES,
-                              future_covariates=WIND_FORECAST_COVARIATES)]
+        from pm25.models.lstm_model import LSTMModel
+        return [LSTMModel(future_covariates=WIND_FORECAST_COVARIATES, name="lstm_nwp"),
+                Chronos2Model("chronos2_wind_nwp", "amazon/chronos-2", **NWP_INPUTS)]
+    if family == "nwp_bestmatch":
+        from pm25.models.chronos import Chronos2Model
+        return [Chronos2Model("chronos2_wind_bestmatch", "amazon/chronos-2", **NWP_INPUTS)]
     raise ValueError(f"unknown family {family!r}; choose from {FAMILIES}")
 
 
@@ -116,8 +130,9 @@ def main() -> None:  # pragma: no cover - CLI entry point
     args = parser.parse_args()
     for station in args.stations:
         df = read_station(Path(PROCESSED_DATA_DIR), station).drop(columns="station")
-        if args.family == "wind_forecast":
-            df = attach_wind_forecast(df, read_station(Path(WIND_FORECAST_DIR), station))
+        if args.family in FAMILY_NWP:
+            nwp = read_station(forecast_dir(FAMILY_NWP[args.family]), station)
+            df = attach_wind_forecast(df, nwp)
         run_station(station, df, make_models(args.family), Path(PREDICTIONS_DIR))
 
 

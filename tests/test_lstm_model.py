@@ -72,3 +72,20 @@ def test_lead_beyond_horizon_and_quantile_mismatch_raise(frame):
 def test_experiment_registers_lstm_family():
     from pm25.experiment import make_models
     assert [m.name for m in make_models("lstm")] == ["lstm"]
+
+
+def test_future_covariates_help_when_target_depends_on_future(rng):
+    idx = pd.date_range("2023-01-01", periods=24 * 90, freq="h", tz="Asia/Taipei")
+    fc = rng.uniform(0, 5, len(idx))
+    frame = pd.DataFrame({"pm25": 20 - 3 * fc + rng.normal(0, 0.3, len(idx)),
+                          "fc_wind_speed": fc}, index=idx)
+    frame.iloc[200:203, 1] = np.nan
+    train = frame[frame.index < "2023-03-01"]
+    batch = build_inputs(frame, context_length=48, horizon=6, origin_hours=(0, 12),
+                         start="2023-03-01")
+    params = dict(leads=(6,), covariates=(), hidden_size=16, max_epochs=80, patience=10)
+    plain = LSTMModel(**params).fit(train)
+    nwp = LSTMModel(**params, future_covariates=("fc_wind_speed",), name="lstm_nwp").fit(train)
+    err = lambda m: np.abs(m.predict(batch.inputs, 6)[:, 1, 5] - batch.targets[:, 5]).mean()  # noqa: E731
+    assert nwp.name == "lstm_nwp" and plain.name == "lstm"
+    assert err(nwp) < err(plain) / 2

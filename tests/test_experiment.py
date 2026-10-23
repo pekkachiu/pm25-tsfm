@@ -61,6 +61,13 @@ def test_make_models_baseline():
     assert [m.name for m in make_models("baseline")] == ["persistence"]
 
 
-def test_make_models_wind_forecast_family_is_lazy():
-    models = make_models("wind_forecast")
-    assert [m.name for m in models] == ["chronos2_wind_forecast"]
+def test_make_models_nwp_families():
+    assert [m.name for m in make_models("nwp_bestmatch")] == ["chronos2_wind_bestmatch"]
+    assert [m.name for m in make_models("nwp_torch")] == ["lstm_nwp", "chronos2_wind_nwp"]
+
+
+def test_family_nwp_sources():
+    from pm25.experiment import FAMILY_NWP
+
+    assert FAMILY_NWP == {"nwp_bestmatch": "best_match", "nwp_xgboost": "jma_gsm",
+                          "nwp_torch": "jma_gsm"}

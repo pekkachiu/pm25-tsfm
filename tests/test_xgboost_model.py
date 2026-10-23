@@ -65,3 +65,25 @@ def test_quantile_levels_must_match_fit(frame):
 def test_experiment_registers_xgboost_family():
     from pm25.experiment import make_models
     assert [m.name for m in make_models("xgboost")] == ["xgboost"]
+
+
+def test_future_covariates_improve_when_target_depends_on_future(rng):
+    idx = pd.date_range("2023-01-01", periods=24 * 120, freq="h", tz="Asia/Taipei")
+    fc = rng.uniform(0, 5, len(idx))
+    pm = 20 - 3 * fc + rng.normal(0, 0.3, len(idx))  # concentration driven by wind at t
+    frame = pd.DataFrame({"pm25": pm, "fc_wind_speed": fc}, index=idx)
+    train, test_start = frame[frame.index < "2023-04-01"], "2023-04-01"
+    batch = build_inputs(frame, context_length=48, horizon=6, origin_hours=(0, 12),
+                         start=test_start)
+    plain = XGBoostModel(leads=(6,), covariates=(), n_estimators=100).fit(train)
+    nwp = XGBoostModel(leads=(6,), covariates=(), future_covariates=("fc_wind_speed",),
+                       n_estimators=100, name="xgboost_nwp").fit(train)
+    err = lambda m: np.abs(m.predict(batch.inputs, 6)[:, 1, 5] - batch.targets[:, 5]).mean()  # noqa: E731
+    assert nwp.name == "xgboost_nwp"
+    assert err(nwp) < err(plain) / 2
+
+
+def test_make_models_nwp_xgboost():
+    from pm25.experiment import make_models
+
+    assert [m.name for m in make_models("nwp_xgboost")] == ["xgboost_nwp"]

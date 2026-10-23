@@ -8,6 +8,7 @@ from pm25.config import STATION_COORDS, STATIONS, WIND_FORECAST_COVARIATES
 from pm25.data.wind_forecast import (
     attach_wind_forecast,
     download_station,
+    forecast_dir,
     parse_forecast,
     request_params,
 )
@@ -31,6 +32,21 @@ def test_request_params_use_day_ahead_forecast():
     assert params["latitude"] == 25.0 and params["longitude"] == 121.5
     assert "wind_speed_10m_previous_day1" in params["hourly"]
     assert params["wind_speed_unit"] == "ms" and params["timezone"] == "Asia/Taipei"
+    assert params["models"] == "jma_gsm"
+
+
+def test_request_params_best_match_omits_model():
+    assert "models" not in request_params(25.0, 121.5, "2024-12-01", "2025-12-31",
+                                          model="best_match")
+
+
+def test_request_params_unknown_model_raises():
+    with pytest.raises(ValueError, match="NWP model"):
+        request_params(25.0, 121.5, "2024-12-01", "2025-12-31", model="nope")
+
+
+def test_forecast_dir_is_per_model():
+    assert forecast_dir("jma_gsm").parts[-2:] == ("wind_forecast", "jma_gsm")
 
 
 def test_parse_forecast_encodes_direction_and_localizes():
@@ -57,8 +73,10 @@ def test_download_station_calls_api_with_station_coords():
     response.json.return_value = _payload()
     session = MagicMock()
     session.get.return_value = response
-    out = download_station("古亭", "2025-01-01", "2025-01-01", session=session)
+    out = download_station("古亭", "2025-01-01", "2025-01-01", session=session,
+                           model="best_match")
     params = session.get.call_args.kwargs["params"]
+    assert "models" not in params
     assert (params["latitude"], params["longitude"]) == STATION_COORDS["古亭"]
     assert len(out) == 3
 

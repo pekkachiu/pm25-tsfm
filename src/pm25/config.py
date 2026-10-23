@@ -42,8 +42,12 @@ STATION_EN = {
 # Realistic future wind: Open-Meteo archived NWP runs, value issued 24 h before valid time
 # (previous_day1), so every forecast for origin+1..+24 h was published by the origin.
 OPEN_METEO_PREVIOUS_RUNS_URL = "https://previous-runs-api.open-meteo.com/v1/forecast"
-WIND_FORECAST_DIR = "data/wind_forecast"
-WIND_FORECAST_START = "2024-12-01"  # covers the 512 h context of the first 2025 origin
+WIND_FORECAST_DIR = "data/wind_forecast"  # one sub-directory per NWP model
+# NWP model -> first date to download. JMA GSM is archived back to 2018, so trained baselines
+# can learn from forecasts over 2021-2024; best_match ("seamless") starts in 2024 and only
+# covers the 512 h context of the first 2025 origin.
+NWP_MODELS = {"jma_gsm": "2020-12-01", "best_match": "2024-12-01"}
+PRIMARY_NWP = "jma_gsm"
 WIND_FORECAST_COVARIATES = ("fc_wind_speed", "fc_wind_sin", "fc_wind_cos")
 
 # aqx_p_13 item code -> canonical column name.
