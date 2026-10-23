@@ -18,17 +18,24 @@ from pm25.config import (
 )
 
 MODEL_ORDER = (
-    "persistence", "xgboost", "lstm", "chronos_bolt_small", "chronos_bolt_base",
-    "chronos2_uni", "chronos2_cov", "chronos2_wind_oracle", "chronos2_wind_forecast",
+    "persistence", "xgboost", "xgboost_nwp", "lstm", "lstm_nwp", "chronos_bolt_small",
+    "chronos_bolt_base", "chronos2_uni", "chronos2_cov", "chronos2_wind_nwp",
+    "chronos2_wind_bestmatch", "chronos2_wind_oracle",
 )
-# Fixed categorical order (validated palette, slots 1-8); colour follows the model.
-# The forecast-wind variant reuses the oracle hue and is drawn dashed / hatched.
-MODEL_COLORS = dict(zip(MODEL_ORDER, (
-    "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948",
-    "#e34948",
-)))
-DASHED_MODELS = ("chronos2_wind_forecast",)
-EPISODE_MODELS = ("xgboost", "chronos2_uni", "chronos2_wind_forecast")
+# Fixed categorical order (validated palette, slots 1-8); colour follows the model family.
+# NWP variants keep their base model's hue and are told apart by hatching / dashes.
+BASE_COLORS = {
+    "persistence": "#2a78d6", "xgboost": "#eb6834", "lstm": "#1baf7a",
+    "chronos_bolt_small": "#eda100", "chronos_bolt_base": "#e87ba4", "chronos2_uni": "#008300",
+    "chronos2_cov": "#6250d6", "chronos2_wind_oracle": "#e34948",
+}
+NWP_BASE = {"xgboost_nwp": "xgboost", "lstm_nwp": "lstm", "chronos2_wind_nwp": "chronos2_cov",
+            "chronos2_wind_bestmatch": "chronos2_cov"}
+MODEL_COLORS = {m: BASE_COLORS[NWP_BASE.get(m, m)] for m in MODEL_ORDER}
+HATCHES = {"xgboost_nwp": "///", "lstm_nwp": "///", "chronos2_wind_nwp": "///",
+           "chronos2_wind_bestmatch": "..."}
+DASHED_MODELS = tuple(HATCHES)
+EPISODE_MODELS = ("xgboost_nwp", "chronos2_uni", "chronos2_wind_nwp")
 MONTHLY_MODELS = ("persistence", "xgboost", "chronos2_uni", "chronos2_wind_oracle")
 INK, INK_MUTED, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 
@@ -72,8 +79,8 @@ def plot_overall_mae(overall: pd.DataFrame, path: Path) -> Path:
         bars = ax.barh(range(len(models)), values, color=[MODEL_COLORS[m] for m in models],
                        height=0.7, edgecolor=SURFACE, linewidth=2)
         for bar, model in zip(bars, models):
-            if model in DASHED_MODELS:
-                bar.set_hatch("///")
+            if model in HATCHES:
+                bar.set_hatch(HATCHES[model])
         for i, v in enumerate(values):
             ax.text(v, i, f" {v:.2f}", va="center", fontsize=8, color=INK)
         ax.set_yticks(range(len(models)), models if lead == leads[0] else [])

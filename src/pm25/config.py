@@ -98,8 +98,12 @@ DM_PAIRS = (
     ("chronos2_uni", "xgboost"),
     ("chronos2_cov", "xgboost"),
     ("chronos2_cov", "chronos2_uni"),
-    ("chronos2_wind_forecast", "chronos2_cov"),
-    ("chronos2_wind_forecast", "xgboost"),
-    ("chronos2_wind_oracle", "chronos2_wind_forecast"),
+    # Phase 1: gain from day-ahead NWP wind within each model, then NWP-vs-NWP.
+    ("xgboost_nwp", "xgboost"),
+    ("lstm_nwp", "lstm"),
+    ("chronos2_wind_nwp", "chronos2_cov"),
+    ("chronos2_wind_nwp", "xgboost_nwp"),
+    ("chronos2_wind_bestmatch", "chronos2_wind_nwp"),
+    ("chronos2_wind_oracle", "chronos2_wind_nwp"),
     ("chronos2_wind_oracle", "xgboost"),
 )
