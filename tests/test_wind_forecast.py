@@ -76,3 +76,9 @@ def test_attach_wind_forecast_aligns_without_mutating():
     assert np.isnan(out["fc_wind_speed"].iloc[0])
     assert out["fc_wind_speed"].iloc[1] == 1.0
     assert out.index.equals(df.index)
+
+
+def test_every_station_has_english_name():
+    from pm25.config import STATION_EN
+
+    assert set(STATION_EN) == set(STATION_COORDS)

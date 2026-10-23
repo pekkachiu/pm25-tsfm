@@ -8,16 +8,27 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from pm25.config import FIGURES_DIR, HORIZONS, TABLES_DIR
+from pm25.config import (
+    FIGURES_DIR,
+    HORIZONS,
+    PM25_AQI100_THRESHOLD,
+    PREDICTIONS_DIR,
+    STATION_EN,
+    TABLES_DIR,
+)
 
 MODEL_ORDER = (
     "persistence", "xgboost", "lstm", "chronos_bolt_small", "chronos_bolt_base",
-    "chronos2_uni", "chronos2_cov", "chronos2_wind_oracle",
+    "chronos2_uni", "chronos2_cov", "chronos2_wind_oracle", "chronos2_wind_forecast",
 )
 # Fixed categorical order (validated palette, slots 1-8); colour follows the model.
+# The forecast-wind variant reuses the oracle hue and is drawn dashed / hatched.
 MODEL_COLORS = dict(zip(MODEL_ORDER, (
     "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948",
+    "#e34948",
 )))
+DASHED_MODELS = ("chronos2_wind_forecast",)
+EPISODE_MODELS = ("xgboost", "chronos2_uni", "chronos2_wind_forecast")
 MONTHLY_MODELS = ("persistence", "xgboost", "chronos2_uni", "chronos2_wind_oracle")
 INK, INK_MUTED, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 
@@ -58,8 +69,11 @@ def plot_overall_mae(overall: pd.DataFrame, path: Path) -> Path:
     fig, axes = plt.subplots(1, len(leads), figsize=(4 * len(leads), 3.6), facecolor=SURFACE)
     for ax, lead in zip(np.atleast_1d(axes).ravel(), leads):
         values = overall[overall["lead"] == lead].set_index("model")["mae"].reindex(models)
-        ax.barh(range(len(models)), values, color=[MODEL_COLORS[m] for m in models],
-                height=0.7, edgecolor=SURFACE, linewidth=2)
+        bars = ax.barh(range(len(models)), values, color=[MODEL_COLORS[m] for m in models],
+                       height=0.7, edgecolor=SURFACE, linewidth=2)
+        for bar, model in zip(bars, models):
+            if model in DASHED_MODELS:
+                bar.set_hatch("///")
         for i, v in enumerate(values):
             ax.text(v, i, f" {v:.2f}", va="center", fontsize=8, color=INK)
         ax.set_yticks(range(len(models)), models if lead == leads[0] else [])
@@ -95,7 +109,7 @@ def plot_monthly_with_drift(monthly: pd.DataFrame, drift: pd.DataFrame, lead: in
     for model in models:
         series = data[data["model"] == model].set_index("month")["mae"].reindex(months)
         top.plot(x, series, color=MODEL_COLORS[model], linewidth=2, marker="o", markersize=4,
-                 label=model)
+                 label=model, linestyle="--" if model in DASHED_MODELS else "-")
     top.set_ylabel("MAE (μg/m³)", color=INK_MUTED, fontsize=9)
     top.set_title(f"Monthly MAE at H = {lead} h", color=INK, fontsize=11, loc="left")
     top.legend(frameon=False, fontsize=8, ncol=2, labelcolor=INK)
@@ -106,6 +120,48 @@ def plot_monthly_with_drift(monthly: pd.DataFrame, drift: pd.DataFrame, lead: in
     bottom.set_xlabel("Month of 2025", color=INK_MUTED, fontsize=9)
     for ax in (top, bottom):
         _style(ax)
+    return _save(fig, path)
+
+
+def peak_episode(preds: pd.DataFrame, model: str, lead: int,
+                 window_hours: int = 72) -> tuple[str, pd.Timestamp, pd.Timestamp]:
+    """Station and a one-week window around its highest rolling-mean PM2.5 period."""
+    sub = preds[(preds["model"] == model) & (preds["lead"] == lead)]
+    best = None
+    for station, group in sub.groupby("station"):
+        rolling = group.set_index("target_time")["y"].sort_index().rolling(
+            window_hours, min_periods=window_hours // 2).mean()
+        if best is None or rolling.max() > best[1]:
+            best = (station, rolling.max(), rolling.idxmax())
+    station, _, peak = best
+    return station, peak - pd.Timedelta(days=4), peak + pd.Timedelta(days=3)
+
+
+def plot_episode(preds: pd.DataFrame, station: str, start, end, lead: int,
+                 models=EPISODE_MODELS, path: Path = None) -> Path:
+    import matplotlib.pyplot as plt
+
+    _check_models(models)
+    sub = preds[(preds["station"] == station) & (preds["lead"] == lead)
+                & preds["target_time"].between(start, end)]
+    fig, axes = plt.subplots(len(models), 1, sharex=True, sharey=True,
+                             figsize=(9, 2.2 * len(models)), facecolor=SURFACE)
+    for ax, model in zip(np.atleast_1d(axes).ravel(), models):
+        m = sub[sub["model"] == model].sort_values("target_time")
+        times = m["target_time"].dt.tz_localize(None)
+        ax.fill_between(times, m["q10"], m["q90"], color=MODEL_COLORS[model], alpha=0.18,
+                        linewidth=0, label="80% interval")
+        ax.plot(times, m["q50"], color=MODEL_COLORS[model], linewidth=2, label="median")
+        ax.plot(times, m["y"], color=INK, linewidth=1.2, label="observed")
+        ax.axhline(PM25_AQI100_THRESHOLD, color=INK_MUTED, linewidth=1, linestyle=":")
+        ax.set_title(model, color=INK, fontsize=10, loc="left")
+        ax.set_ylabel("PM2.5", color=INK_MUTED, fontsize=9)
+        _style(ax)
+    first = np.atleast_1d(axes).ravel()[0]
+    first.legend(frameon=False, fontsize=8, ncol=3, labelcolor=INK, loc="upper right")
+    fig.suptitle(f"{STATION_EN.get(station, station)}, H = {lead} h forecasts (dotted: AQI 100 threshold)",
+                 color=INK, fontsize=11)
+    fig.autofmt_xdate()
     return _save(fig, path)
 
 
@@ -120,6 +176,13 @@ def main() -> None:  # pragma: no cover - file IO entry point
     print(plot_overall_mae(overall, out / "overall_mae.png"))
     for lead in HORIZONS:
         print(plot_monthly_with_drift(monthly, drift, lead, out / f"monthly_drift_h{lead}.png"))
+    from pm25.evaluation.report import load_predictions
+
+    preds = load_predictions(Path(PREDICTIONS_DIR))
+    lead = max(HORIZONS)
+    station, start, end = peak_episode(preds, "xgboost", lead)
+    models = tuple(m for m in EPISODE_MODELS if m in set(preds["model"]))
+    print(plot_episode(preds, station, start, end, lead, models, out / "episode_case.png"))
 
 
 if __name__ == "__main__":  # pragma: no cover

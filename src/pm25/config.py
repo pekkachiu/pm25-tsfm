@@ -32,6 +32,13 @@ STATION_COORDS = {
     "小港": (22.565833, 120.337736), "屏東": (22.673081, 120.488033),
 }
 
+# English site names (aqx_p_07 siteengname) for figures and the English report.
+STATION_EN = {
+    "古亭": "Guting", "板橋": "Banqiao", "桃園": "Taoyuan", "忠明": "Zhongming",
+    "西屯": "Xitun", "彰化": "Changhua", "斗六": "Douliu", "嘉義": "Chiayi",
+    "臺南": "Tainan", "前金": "Qianjin", "小港": "Xiaogang", "屏東": "Pingtung",
+}
+
 # Realistic future wind: Open-Meteo archived NWP runs, value issued 24 h before valid time
 # (previous_day1), so every forecast for origin+1..+24 h was published by the origin.
 OPEN_METEO_PREVIOUS_RUNS_URL = "https://previous-runs-api.open-meteo.com/v1/forecast"
@@ -75,3 +82,20 @@ PM25_AQI100_THRESHOLD = 30.5
 AUTUMN_WINTER_MONTHS = (10, 11, 12, 1, 2, 3)
 
 ADWIN_DELTA = 0.002  # river's default confidence for ADWIN
+
+# Diebold-Mariano tests on absolute-error differentials (model, baseline). Hourly origins
+# overlap and PM2.5 errors persist for days, so the Newey-West lag is two days.
+DM_HAC_LAG = 48
+DM_PAIRS = (
+    ("xgboost", "persistence"),
+    ("lstm", "xgboost"),
+    ("chronos_bolt_base", "chronos_bolt_small"),
+    ("chronos2_uni", "persistence"),
+    ("chronos2_uni", "xgboost"),
+    ("chronos2_cov", "xgboost"),
+    ("chronos2_cov", "chronos2_uni"),
+    ("chronos2_wind_forecast", "chronos2_cov"),
+    ("chronos2_wind_forecast", "xgboost"),
+    ("chronos2_wind_oracle", "chronos2_wind_forecast"),
+    ("chronos2_wind_oracle", "xgboost"),
+)

@@ -50,3 +50,36 @@ def test_plot_overall_mae_rejects_unknown_model(tmp_path):
     bad = pd.concat([_overall(), pd.DataFrame([{"model": "mystery", "lead": 1, "mae": 1.0}])])
     with pytest.raises(ValueError, match="mystery"):
         plot_overall_mae(bad, tmp_path / "x.png")
+
+
+def _series_preds(model, station="古亭", n=24 * 10, peak_at=None, lead=24):
+    import numpy as np
+
+    origins = pd.date_range("2025-01-01", periods=n, freq="h", tz="Asia/Taipei")
+    y = np.full(n, 10.0)
+    if peak_at is not None:
+        y[peak_at:peak_at + 24] = 80.0
+    return pd.DataFrame({"station": station, "model": model, "origin": origins, "lead": lead,
+                         "target_time": origins + pd.Timedelta(hours=lead), "y": y,
+                         "q10": y - 3, "q50": y, "q90": y + 3})
+
+
+def test_peak_episode_finds_station_and_window():
+    from pm25.evaluation.figures import peak_episode
+
+    preds = pd.concat([_series_preds("xgboost"),
+                       _series_preds("xgboost", station="小港", peak_at=24 * 5)])
+    station, start, end = peak_episode(preds, model="xgboost", lead=24, window_hours=24)
+    assert station == "小港"
+    peak = pd.Timestamp("2025-01-06 00:00", tz="Asia/Taipei") + pd.Timedelta(hours=24)
+    assert start < peak < end
+
+
+def test_plot_episode_writes_png(tmp_path):
+    from pm25.evaluation.figures import plot_episode
+
+    preds = pd.concat([_series_preds(m) for m in ("xgboost", "chronos2_uni")])
+    start, end = preds["target_time"].min(), preds["target_time"].max()
+    path = plot_episode(preds, "古亭", start, end, lead=24,
+                        models=("xgboost", "chronos2_uni"), path=tmp_path / "e.png")
+    assert path.exists() and path.stat().st_size > 0
