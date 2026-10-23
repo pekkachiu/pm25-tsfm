@@ -120,4 +120,10 @@ DM_PAIRS = (
     ("chronos2_wind_bestmatch", "chronos2_wind_nwp"),
     ("chronos2_wind_oracle", "chronos2_wind_nwp"),
     ("chronos2_wind_oracle", "xgboost"),
+    # Phase 3: fine-tuned vs zero-shot Chronos-2, and vs XGBoost with the same inputs.
+    ("chronos2_ft_uni", "chronos2_uni"),
+    ("chronos2_ft_cov", "chronos2_cov"),
+    ("chronos2_ft_nwp", "chronos2_wind_nwp"),
+    ("chronos2_ft_cov", "xgboost"),
+    ("chronos2_ft_nwp", "xgboost_nwp"),
 )
