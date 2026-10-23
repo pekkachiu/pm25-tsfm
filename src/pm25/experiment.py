@@ -18,6 +18,7 @@ import pandas as pd
 from pm25.config import (
     CONTEXT_LENGTH,
     COVARIATES,
+    FINETUNED_DIR,
     FORECAST_LENGTH,
     HORIZONS,
     PREDICTIONS_DIR,
@@ -35,11 +36,11 @@ from pm25.data.wind_forecast import attach_wind_forecast, forecast_dir
 from pm25.evaluation.rolling import build_inputs
 
 FAMILIES = ("baseline", "xgboost", "lstm", "chronos", "nwp_xgboost", "nwp_torch",
-            "nwp_bestmatch")
+            "nwp_bestmatch", "finetuned")
 # Families that need NWP wind, and the NWP model they read. best_match is archived only
 # from 2024, so it is limited to the zero-shot Chronos-2 sensitivity run.
 FAMILY_NWP = {"nwp_bestmatch": "best_match", "nwp_xgboost": PRIMARY_NWP,
-              "nwp_torch": PRIMARY_NWP}
+              "nwp_torch": PRIMARY_NWP, "finetuned": PRIMARY_NWP}
 NWP_INPUTS = dict(past_covariates=COVARIATES + WIND_FORECAST_COVARIATES,
                   future_covariates=WIND_FORECAST_COVARIATES)
 
@@ -76,6 +77,15 @@ def make_models(family: str) -> list:
     if family == "nwp_bestmatch":
         from pm25.models.chronos import Chronos2Model
         return [Chronos2Model("chronos2_wind_bestmatch", "amazon/chronos-2", **NWP_INPUTS)]
+    if family == "finetuned":
+        from pm25.models.chronos import Chronos2Model
+        from pm25.models.finetune import FINETUNE_VARIANTS
+        # only variants whose checkpoint exists (see pm25.models.finetune)
+        return [Chronos2Model(name, str(Path(FINETUNED_DIR) / name),
+                              past_covariates=spec.past_covariates,
+                              future_covariates=spec.future_covariates)
+                for name, spec in FINETUNE_VARIANTS.items()
+                if (Path(FINETUNED_DIR) / name).is_dir()]
     raise ValueError(f"unknown family {family!r}; choose from {FAMILIES}")
 
 

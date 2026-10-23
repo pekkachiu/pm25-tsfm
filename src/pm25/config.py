@@ -87,6 +87,16 @@ AUTUMN_WINTER_MONTHS = (10, 11, 12, 1, 2, 3)
 
 ADWIN_DELTA = 0.002  # river's default confidence for ADWIN
 
+# Phase 3: fine-tuning one global Chronos-2. Train 2021-2023, select the learning rate and
+# checkpoint on 2024, test on 2025 like every other model.
+FINETUNE_TRAIN = ("2021-01-01", "2023-12-31 23:00")
+FINETUNE_VALID = ("2024-01-01", "2024-12-31 23:00")
+FINETUNE_LEARNING_RATES = (1e-6, 1e-5)  # full fine-tuning; 1e-6 is the Chronos-2 default
+FINETUNE_STEPS = 1000  # Chronos2Pipeline.fit default; best checkpoint by 2024 loss
+FINETUNE_BATCH_SIZE = 256
+FINETUNE_VAL_EVERY_HOURS = 72  # validation windows every 3 days of 2024, per station
+FINETUNED_DIR = "results/finetuned"
+
 # Adaptive conformal inference: margin step in ug/m3 per observed outcome, fixed a priori
 # (not tuned on the test year). See pm25.evaluation.conformal.
 ACI_STEP = 0.05
