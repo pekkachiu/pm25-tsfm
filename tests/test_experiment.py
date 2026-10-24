@@ -70,4 +70,15 @@ def test_family_nwp_sources():
     from pm25.experiment import FAMILY_NWP
 
     assert FAMILY_NWP == {"nwp_bestmatch": "best_match", "nwp_xgboost": "jma_gsm",
-                          "nwp_torch": "jma_gsm"}
+                          "nwp_torch": "jma_gsm", "finetuned": "jma_gsm"}
+
+
+def test_make_models_finetuned_uses_existing_checkpoints(tmp_path, monkeypatch):
+    import pm25.experiment as experiment
+
+    monkeypatch.setattr(experiment, "FINETUNED_DIR", str(tmp_path))
+    assert make_models("finetuned") == []
+    (tmp_path / "chronos2_ft_nwp").mkdir()
+    models = make_models("finetuned")
+    assert [m.name for m in models] == ["chronos2_ft_nwp"]
+    assert models[0]._future == ("fc_wind_speed", "fc_wind_sin", "fc_wind_cos")

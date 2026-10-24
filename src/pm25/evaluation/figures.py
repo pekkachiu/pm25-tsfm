@@ -20,7 +20,8 @@ from pm25.config import (
 MODEL_ORDER = (
     "persistence", "xgboost", "xgboost_nwp", "lstm", "lstm_nwp", "chronos_bolt_small",
     "chronos_bolt_base", "chronos2_uni", "chronos2_cov", "chronos2_wind_nwp",
-    "chronos2_wind_bestmatch", "chronos2_wind_oracle",
+    "chronos2_wind_bestmatch", "chronos2_wind_oracle", "chronos2_ft_uni", "chronos2_ft_cov",
+    "chronos2_ft_nwp",
 )
 # Fixed categorical order (validated palette, slots 1-8); colour follows the model family.
 # NWP variants keep their base model's hue and are told apart by hatching / dashes.
@@ -30,10 +31,12 @@ BASE_COLORS = {
     "chronos2_cov": "#6250d6", "chronos2_wind_oracle": "#e34948",
 }
 NWP_BASE = {"xgboost_nwp": "xgboost", "lstm_nwp": "lstm", "chronos2_wind_nwp": "chronos2_cov",
-            "chronos2_wind_bestmatch": "chronos2_cov"}
+            "chronos2_wind_bestmatch": "chronos2_cov", "chronos2_ft_uni": "chronos2_uni",
+            "chronos2_ft_cov": "chronos2_cov", "chronos2_ft_nwp": "chronos2_cov"}
 MODEL_COLORS = {m: BASE_COLORS[NWP_BASE.get(m, m)] for m in MODEL_ORDER}
 HATCHES = {"xgboost_nwp": "///", "lstm_nwp": "///", "chronos2_wind_nwp": "///",
-           "chronos2_wind_bestmatch": "..."}
+           "chronos2_wind_bestmatch": "...", "chronos2_ft_uni": "xx", "chronos2_ft_cov": "xx",
+           "chronos2_ft_nwp": "xx///"}
 DASHED_MODELS = tuple(HATCHES)
 EPISODE_MODELS = ("xgboost_nwp", "chronos2_uni", "chronos2_wind_nwp")
 MONTHLY_MODELS = ("persistence", "xgboost", "chronos2_uni", "chronos2_wind_oracle")
