@@ -124,3 +124,22 @@ def test_make_models_finetuned_uses_existing_checkpoints(tmp_path, monkeypatch):
     models = make_models("finetuned")
     assert [m.name for m in models] == ["chronos2_ft_nwp"]
     assert models[0]._future == ("fc_wind_speed", "fc_wind_sin", "fc_wind_cos")
+
+
+def test_make_models_finetuned_reads_year_specific_checkpoints(tmp_path, monkeypatch):
+    import pm25.experiment as experiment
+
+    monkeypatch.setattr(experiment, "FINETUNED_DIR", str(tmp_path / "finetuned"))
+    (tmp_path / "finetuned" / "chronos2_ft_uni").mkdir(parents=True)
+    assert make_models("finetuned", test_year=2024) == []
+    (tmp_path / "finetuned_2024" / "chronos2_ft_cov").mkdir(parents=True)
+    assert [m.name for m in make_models("finetuned", test_year=2024)] == ["chronos2_ft_cov"]
+
+
+def test_check_family_year_rejects_bestmatch_before_its_archive():
+    from pm25.experiment import check_family_year
+
+    check_family_year("nwp_bestmatch", 2025)
+    check_family_year("chronos", 2024)
+    with pytest.raises(ValueError, match="best_match"):
+        check_family_year("nwp_bestmatch", 2024)

@@ -3,7 +3,7 @@
 Each model family runs in its own process because torch and xgboost cannot share one
 on macOS (see CLAUDE.md):
 
-    uv run python -m pm25.experiment --family <family> [--stations ...]
+    uv run python -m pm25.experiment --family <family> [--stations ...] [--test-year 2024]
 
 nwp_* families add day-ahead NWP wind (data/wind_forecast/<model>/) as future covariates;
 spatial_* families also add other stations' PM2.5 as past covariates (phase 4).
@@ -26,7 +26,9 @@ from pm25.config import (
     PROCESSED_DATA_DIR,
     QUANTILE_LEVELS,
     STATIONS,
+    NWP_MODELS,
     TEST_YEAR,
+    TEST_YEARS,
     WIND_COVARIATES,
     PRIMARY_NWP,
     WIND_FORECAST_COVARIATES,
@@ -36,6 +38,7 @@ from pm25.data.io import read_station, write_predictions
 from pm25.data.split import split_by_year
 from pm25.data.wind_forecast import attach_wind_forecast, forecast_dir
 from pm25.evaluation.rolling import build_inputs
+from pm25.paths import for_year
 
 FAMILIES = ("baseline", "xgboost", "lstm", "chronos", "nwp_xgboost", "nwp_torch",
             "nwp_bestmatch", "finetuned", "spatial_xgboost", "spatial_chronos")
@@ -50,7 +53,15 @@ NWP_INPUTS = dict(past_covariates=COVARIATES + WIND_FORECAST_COVARIATES,
 NEAREST = spatial_columns("nearest")
 
 
-def make_models(family: str) -> list:
+def check_family_year(family: str, test_year: int) -> None:
+    """NWP archives must cover the whole test year (including its first context)."""
+    nwp = FAMILY_NWP.get(family)
+    if nwp is not None and NWP_MODELS[nwp] >= f"{test_year}-01-01":
+        raise ValueError(f"{nwp} is archived only from {NWP_MODELS[nwp]}; "
+                         f"family {family} cannot be tested on {test_year}")
+
+
+def make_models(family: str, test_year: int = TEST_YEAR) -> list:
     """Fresh model instances for one family; imports stay local to keep families isolated."""
     if family == "baseline":
         from pm25.models.persistence import PersistenceModel
@@ -85,12 +96,12 @@ def make_models(family: str) -> list:
     if family == "finetuned":
         from pm25.models.chronos import Chronos2Model
         from pm25.models.finetune import FINETUNE_VARIANTS
-        # only variants whose checkpoint exists (see pm25.models.finetune)
-        return [Chronos2Model(name, str(Path(FINETUNED_DIR) / name),
+        # only variants whose checkpoint for this test year exists (see pm25.models.finetune)
+        checkpoints = Path(for_year(FINETUNED_DIR, test_year))
+        return [Chronos2Model(name, str(checkpoints / name),
                               past_covariates=spec.past_covariates,
                               future_covariates=spec.future_covariates)
-                for name, spec in FINETUNE_VARIANTS.items()
-                if (Path(FINETUNED_DIR) / name).is_dir()]
+                for name, spec in FINETUNE_VARIANTS.items() if (checkpoints / name).is_dir()]
     if family == "spatial_xgboost":
         from pm25.models.xgboost_model import XGBoostModel
         return [XGBoostModel(covariates=COVARIATES + NEAREST, name="xgboost_spatial"),
@@ -178,10 +189,14 @@ def main() -> None:  # pragma: no cover - CLI entry point
     parser.add_argument("--family", choices=FAMILIES, required=True)
     parser.add_argument("--stations", nargs="*",
                         default=[s for group in STATIONS.values() for s in group])
+    parser.add_argument("--test-year", type=int, choices=TEST_YEARS, default=TEST_YEAR)
     args = parser.parse_args()
+    check_family_year(args.family, args.test_year)
+    out_dir = Path(for_year(PREDICTIONS_DIR, args.test_year))
     for station in args.stations:
-        run_station(station, load_station(station, args.family), make_models(args.family),
-                    Path(PREDICTIONS_DIR))
+        run_station(station, load_station(station, args.family),
+                    make_models(args.family, args.test_year), out_dir,
+                    test_year=args.test_year)
 
 
 if __name__ == "__main__":  # pragma: no cover

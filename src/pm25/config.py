@@ -68,6 +68,9 @@ MAX_INTERP_GAP_HOURS = 3
 
 YEARS = (2021, 2022, 2023, 2024, 2025)
 TEST_YEAR = 2025
+# Phase 5: 2024 as a second test year (train 2021-2023). Its outputs go to <dir>_2024 so
+# the 2025 results stay where they are (see pm25.paths).
+TEST_YEARS = (2025, 2024)
 
 HORIZONS = (1, 6, 24)
 FORECAST_LENGTH = max(HORIZONS)  # every origin forecasts 24 steps; HORIZONS are lead times
@@ -91,6 +94,11 @@ ADWIN_DELTA = 0.002  # river's default confidence for ADWIN
 # checkpoint on 2024, test on 2025 like every other model.
 FINETUNE_TRAIN = ("2021-01-01", "2023-12-31 23:00")
 FINETUNE_VALID = ("2024-01-01", "2024-12-31 23:00")
+# test year -> (train, valid) windows; the 2024 test shifts both one year earlier.
+FINETUNE_SPLITS = {
+    2025: (FINETUNE_TRAIN, FINETUNE_VALID),
+    2024: (("2021-01-01", "2022-12-31 23:00"), ("2023-01-01", "2023-12-31 23:00")),
+}
 FINETUNE_LEARNING_RATES = (1e-6, 1e-5)  # full fine-tuning; 1e-6 is the Chronos-2 default
 FINETUNE_STEPS = 1000  # Chronos2Pipeline.fit default; best checkpoint by 2024 loss
 FINETUNE_BATCH_SIZE = 256
