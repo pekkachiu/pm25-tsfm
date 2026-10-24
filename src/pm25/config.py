@@ -97,6 +97,12 @@ FINETUNE_BATCH_SIZE = 256
 FINETUNE_VAL_EVERY_HOURS = 72  # validation windows every 3 days of 2024, per station
 FINETUNED_DIR = "results/finetuned"
 
+# Phase 4: other stations' PM2.5 as past covariates. "nearest" = SPATIAL_K closest stations
+# by great-circle distance, "region" = the other stations of the same air-quality region,
+# "all" = the other 11 stations; each scope is ordered by distance.
+SPATIAL_K = 3
+SPATIAL_SCOPES = ("nearest", "region", "all")
+
 # Adaptive conformal inference: margin step in ug/m3 per observed outcome, fixed a priori
 # (not tuned on the test year). See pm25.evaluation.conformal.
 ACI_STEP = 0.05
@@ -126,4 +132,15 @@ DM_PAIRS = (
     ("chronos2_ft_nwp", "chronos2_wind_nwp"),
     ("chronos2_ft_cov", "xgboost"),
     ("chronos2_ft_nwp", "xgboost_nwp"),
+    # Phase 4: gain from neighbour PM2.5 within each model, scope ablation, then fair pairs.
+    ("xgboost_spatial", "xgboost"),
+    ("xgboost_spatial_all", "xgboost_spatial"),
+    ("xgboost_spatial_nwp", "xgboost_nwp"),
+    ("chronos2_spatial", "chronos2_cov"),
+    ("chronos2_spatial_region", "chronos2_spatial"),
+    ("chronos2_spatial_all", "chronos2_spatial"),
+    ("chronos2_spatial_nwp", "chronos2_wind_nwp"),
+    ("chronos2_spatial", "xgboost_spatial"),
+    ("chronos2_spatial_all", "xgboost_spatial_all"),
+    ("chronos2_spatial_nwp", "xgboost_spatial_nwp"),
 )

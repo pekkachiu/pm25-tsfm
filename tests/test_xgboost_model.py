@@ -87,3 +87,14 @@ def test_make_models_nwp_xgboost():
     from pm25.experiment import make_models
 
     assert [m.name for m in make_models("nwp_xgboost")] == ["xgboost_nwp"]
+
+
+def test_make_models_spatial_xgboost():
+    from pm25.experiment import make_models
+
+    models = {m.name: m for m in make_models("spatial_xgboost")}
+    assert list(models) == ["xgboost_spatial", "xgboost_spatial_all", "xgboost_spatial_nwp"]
+    assert models["xgboost_spatial"]._covariates[-1] == "pm25_nearest3"
+    assert models["xgboost_spatial_all"]._covariates[-1] == "pm25_all11"
+    assert models["xgboost_spatial_nwp"]._future == ("fc_wind_speed", "fc_wind_sin",
+                                                     "fc_wind_cos")
