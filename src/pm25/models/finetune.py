@@ -2,9 +2,10 @@
 
 Training uses each station's full 2021-2023 series (random windows are drawn by
 Chronos2Pipeline.fit); 2024 windows select the learning rate and the best checkpoint;
-2025 stays untouched for the test. Run on a GPU:
+2025 stays untouched for the test. For the 2024 test (phase 5) both windows move one year
+earlier (config.FINETUNE_SPLITS). Run on a GPU:
 
-    python -m pm25.models.finetune --variant chronos2_ft_nwp
+    python -m pm25.models.finetune --variant chronos2_ft_nwp [--test-year 2024]
 """
 
 import argparse
@@ -31,8 +32,11 @@ from pm25.config import (
     PROCESSED_DATA_DIR,
     STATIONS,
     TARGET,
+    TEST_YEAR,
+    TEST_YEARS,
     WIND_FORECAST_COVARIATES,
 )
+from pm25.paths import finetune_split, for_year
 
 
 @dataclass(frozen=True)
@@ -162,18 +166,21 @@ def main() -> None:  # pragma: no cover - GPU entry point
     parser.add_argument("--variant", choices=sorted(FINETUNE_VARIANTS), nargs="+",
                         default=sorted(FINETUNE_VARIANTS))
     parser.add_argument("--num-steps", type=int, default=FINETUNE_STEPS)
+    parser.add_argument("--test-year", type=int, choices=TEST_YEARS, default=TEST_YEAR)
     args = parser.parse_args()
+    out_dir = Path(for_year(FINETUNED_DIR, args.test_year))
+    train, valid = finetune_split(args.test_year)
     frames = {}
     for station in (s for group in STATIONS.values() for s in group):
         df = read_station(Path(PROCESSED_DATA_DIR), station).drop(columns="station")
         frames[station] = attach_wind_forecast(
             df, read_station(forecast_dir(PRIMARY_NWP), station))
     for name in args.variant:
-        if (Path(FINETUNED_DIR) / name).is_dir():  # resume after a disconnected runtime
+        if (out_dir / name).is_dir():  # resume after a disconnected runtime
             print(f"{name}: checkpoint exists, skipped", flush=True)
             continue
         summary = finetune(_load("amazon/chronos-2"), FINETUNE_VARIANTS[name], frames,
-                           Path(FINETUNED_DIR), num_steps=args.num_steps)
+                           out_dir, train=train, valid=valid, num_steps=args.num_steps)
         print(json.dumps(summary), flush=True)
 
 

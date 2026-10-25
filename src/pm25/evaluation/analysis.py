@@ -1,6 +1,7 @@
 """Significance tests, per-station comparisons and drift recovery times.
 
-Run `uv run python -m pm25.evaluation.analysis` after `pm25.evaluation.report`.
+Run `uv run python -m pm25.evaluation.analysis [--test-year 2024]` after
+`pm25.evaluation.report`.
 """
 
 import math
@@ -154,8 +155,11 @@ def station_summary(df: pd.DataFrame, year: int, threshold: float) -> dict:
 def main() -> None:  # pragma: no cover - file IO entry point
     from pm25.evaluation.report import load_predictions, score_table
 
-    out = Path(TABLES_DIR)
-    preds = load_predictions(Path(PREDICTIONS_DIR))
+    from pm25.paths import for_year, parse_test_year
+
+    year = parse_test_year(description=__doc__)
+    out = Path(for_year(TABLES_DIR, year))
+    preds = load_predictions(Path(for_year(PREDICTIONS_DIR, year)))
     drift = pd.read_csv(out / "drift_points.csv")
     drift["time"] = pd.to_datetime(drift["time"], utc=True)
     tables = {

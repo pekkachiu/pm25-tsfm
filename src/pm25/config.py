@@ -68,6 +68,9 @@ MAX_INTERP_GAP_HOURS = 3
 
 YEARS = (2021, 2022, 2023, 2024, 2025)
 TEST_YEAR = 2025
+# Phase 5: 2024 as a second test year (train 2021-2023). Its outputs go to <dir>_2024 so
+# the 2025 results stay where they are (see pm25.paths).
+TEST_YEARS = (2025, 2024)
 
 HORIZONS = (1, 6, 24)
 FORECAST_LENGTH = max(HORIZONS)  # every origin forecasts 24 steps; HORIZONS are lead times
@@ -91,11 +94,22 @@ ADWIN_DELTA = 0.002  # river's default confidence for ADWIN
 # checkpoint on 2024, test on 2025 like every other model.
 FINETUNE_TRAIN = ("2021-01-01", "2023-12-31 23:00")
 FINETUNE_VALID = ("2024-01-01", "2024-12-31 23:00")
+# test year -> (train, valid) windows; the 2024 test shifts both one year earlier.
+FINETUNE_SPLITS = {
+    2025: (FINETUNE_TRAIN, FINETUNE_VALID),
+    2024: (("2021-01-01", "2022-12-31 23:00"), ("2023-01-01", "2023-12-31 23:00")),
+}
 FINETUNE_LEARNING_RATES = (1e-6, 1e-5)  # full fine-tuning; 1e-6 is the Chronos-2 default
 FINETUNE_STEPS = 1000  # Chronos2Pipeline.fit default; best checkpoint by 2024 loss
 FINETUNE_BATCH_SIZE = 256
 FINETUNE_VAL_EVERY_HOURS = 72  # validation windows every 3 days of 2024, per station
 FINETUNED_DIR = "results/finetuned"
+
+# Phase 4: other stations' PM2.5 as past covariates. "nearest" = SPATIAL_K closest stations
+# by great-circle distance, "region" = the other stations of the same air-quality region,
+# "all" = the other 11 stations; each scope is ordered by distance.
+SPATIAL_K = 3
+SPATIAL_SCOPES = ("nearest", "region", "all")
 
 # Adaptive conformal inference: margin step in ug/m3 per observed outcome, fixed a priori
 # (not tuned on the test year). See pm25.evaluation.conformal.
@@ -126,4 +140,15 @@ DM_PAIRS = (
     ("chronos2_ft_nwp", "chronos2_wind_nwp"),
     ("chronos2_ft_cov", "xgboost"),
     ("chronos2_ft_nwp", "xgboost_nwp"),
+    # Phase 4: gain from neighbour PM2.5 within each model, scope ablation, then fair pairs.
+    ("xgboost_spatial", "xgboost"),
+    ("xgboost_spatial_all", "xgboost_spatial"),
+    ("xgboost_spatial_nwp", "xgboost_nwp"),
+    ("chronos2_spatial", "chronos2_cov"),
+    ("chronos2_spatial_region", "chronos2_spatial"),
+    ("chronos2_spatial_all", "chronos2_spatial"),
+    ("chronos2_spatial_nwp", "chronos2_wind_nwp"),
+    ("chronos2_spatial", "xgboost_spatial"),
+    ("chronos2_spatial_all", "xgboost_spatial_all"),
+    ("chronos2_spatial_nwp", "xgboost_spatial_nwp"),
 )

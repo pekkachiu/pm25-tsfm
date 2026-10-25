@@ -1,6 +1,6 @@
 """Aggregate saved predictions into metric tables, monthly errors and ADWIN drift points.
 
-Run `uv run python -m pm25.evaluation.report` after the experiments.
+Run `uv run python -m pm25.evaluation.report [--test-year 2024]` after the experiments.
 """
 
 from pathlib import Path
@@ -18,6 +18,7 @@ from pm25.config import (
     TABLES_DIR,
 )
 from pm25.data.io import read_predictions
+from pm25.paths import for_year, parse_test_year
 from pm25.evaluation.metrics import (
     exceedance_scores,
     interval_coverage,
@@ -110,9 +111,10 @@ def detect_drift(preds: pd.DataFrame, delta: float = ADWIN_DELTA) -> pd.DataFram
 
 
 def main() -> None:  # pragma: no cover - file IO entry point
-    out = Path(TABLES_DIR)
+    year = parse_test_year(description=__doc__)
+    out = Path(for_year(TABLES_DIR, year))
     out.mkdir(parents=True, exist_ok=True)
-    preds = add_context_columns(load_predictions(Path(PREDICTIONS_DIR)))
+    preds = add_context_columns(load_predictions(Path(for_year(PREDICTIONS_DIR, year))))
     tables = {
         "overall": score_table(preds),
         "by_region": score_table(preds, by=("region", "model", "lead")),

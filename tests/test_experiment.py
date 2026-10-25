@@ -70,7 +70,49 @@ def test_family_nwp_sources():
     from pm25.experiment import FAMILY_NWP
 
     assert FAMILY_NWP == {"nwp_bestmatch": "best_match", "nwp_xgboost": "jma_gsm",
-                          "nwp_torch": "jma_gsm", "finetuned": "jma_gsm"}
+                          "nwp_torch": "jma_gsm", "finetuned": "jma_gsm",
+                          "spatial_xgboost": "jma_gsm", "spatial_chronos": "jma_gsm"}
+
+
+def test_make_models_spatial_chronos_inputs():
+    models = {m.name: m for m in make_models("spatial_chronos")}
+    assert list(models) == ["chronos2_spatial", "chronos2_spatial_region",
+                            "chronos2_spatial_all", "chronos2_spatial_nwp"]
+    assert models["chronos2_spatial"]._past[-3:] == ("pm25_nearest1", "pm25_nearest2",
+                                                     "pm25_nearest3")
+    assert models["chronos2_spatial_region"]._past[-1] == "pm25_region2"
+    assert models["chronos2_spatial_all"]._past[-1] == "pm25_all11"
+    assert models["chronos2_spatial_nwp"]._future == ("fc_wind_speed", "fc_wind_sin",
+                                                      "fc_wind_cos")
+    assert models["chronos2_spatial"]._future == ()
+
+
+def _write_processed(directory, stations, idx):
+    from pm25.data.io import write_station
+
+    directory.mkdir(parents=True, exist_ok=True)
+    for i, s in enumerate(stations):
+        write_station(pd.DataFrame({"pm25": float(i), "station": s}, index=idx), directory, s)
+
+
+def test_load_station_attaches_nwp_and_neighbours(tmp_path):
+    from pm25.config import STATIONS
+    from pm25.data.io import write_station
+    from pm25.experiment import load_station
+
+    idx = pd.date_range("2025-01-01", periods=3, freq="h", tz="Asia/Taipei")
+    stations = [s for group in STATIONS.values() for s in group]
+    _write_processed(tmp_path / "processed", stations, idx)
+    (tmp_path / "nwp" / "jma_gsm").mkdir(parents=True)
+    write_station(pd.DataFrame({"fc_wind_speed": 1.5}, index=idx[:2]),
+                  tmp_path / "nwp" / "jma_gsm", "古亭")
+    df = load_station("古亭", "spatial_chronos", tmp_path / "processed", tmp_path / "nwp")
+    assert "station" not in df.columns
+    assert df["fc_wind_speed"].isna().tolist() == [False, False, True]
+    assert (df["pm25_nearest1"] == stations.index("板橋")).all()
+    assert df.filter(like="pm25_all").shape[1] == 11
+    plain = load_station("古亭", "baseline", tmp_path / "processed")
+    assert plain.columns.tolist() == ["pm25"]
 
 
 def test_make_models_finetuned_uses_existing_checkpoints(tmp_path, monkeypatch):
@@ -82,3 +124,22 @@ def test_make_models_finetuned_uses_existing_checkpoints(tmp_path, monkeypatch):
     models = make_models("finetuned")
     assert [m.name for m in models] == ["chronos2_ft_nwp"]
     assert models[0]._future == ("fc_wind_speed", "fc_wind_sin", "fc_wind_cos")
+
+
+def test_make_models_finetuned_reads_year_specific_checkpoints(tmp_path, monkeypatch):
+    import pm25.experiment as experiment
+
+    monkeypatch.setattr(experiment, "FINETUNED_DIR", str(tmp_path / "finetuned"))
+    (tmp_path / "finetuned" / "chronos2_ft_uni").mkdir(parents=True)
+    assert make_models("finetuned", test_year=2024) == []
+    (tmp_path / "finetuned_2024" / "chronos2_ft_cov").mkdir(parents=True)
+    assert [m.name for m in make_models("finetuned", test_year=2024)] == ["chronos2_ft_cov"]
+
+
+def test_check_family_year_rejects_bestmatch_before_its_archive():
+    from pm25.experiment import check_family_year
+
+    check_family_year("nwp_bestmatch", 2025)
+    check_family_year("chronos", 2024)
+    with pytest.raises(ValueError, match="best_match"):
+        check_family_year("nwp_bestmatch", 2024)

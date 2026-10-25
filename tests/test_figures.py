@@ -83,3 +83,12 @@ def test_plot_episode_writes_png(tmp_path):
     path = plot_episode(preds, "古亭", start, end, lead=24,
                         models=("xgboost", "chronos2_uni"), path=tmp_path / "e.png")
     assert path.exists() and path.stat().st_size > 0
+
+
+def test_every_compared_model_has_a_style():
+    from pm25.config import DM_PAIRS
+    from pm25.evaluation.figures import HATCHES, MODEL_COLORS, NWP_BASE
+
+    compared = {m for pair in DM_PAIRS for m in pair}
+    assert compared <= set(MODEL_COLORS)
+    assert set(HATCHES) <= set(NWP_BASE)  # every hatched variant borrows a base hue
