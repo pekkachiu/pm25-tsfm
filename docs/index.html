@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Static page: no inline scripts, third-party code only from cdnjs with SRI, data same-origin. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data: https://tile.openstreetmap.org; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>台灣 PM2.5 預測瀏覽器</title>
+  <meta name="description" content="比較時間序列基礎模型（Chronos-2）與各站訓練模型對台灣 12 個測站 PM2.5 的預測。">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"
+        integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vJgsLZbdLE3w=="
+        crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="assets/style.css?v=2">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
+          integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg=="
+          crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"
+          integrity="sha512-XSmbX3mhrD2ix5fXPTRQb2FwK22sRMVQTpBP2ac8hX7Dh/605hA2QDegVWiAvZPiXIxOV0CbkmUjGionDpbCmw=="
+          crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="assets/core.js?v=2" defer></script>
+  <script src="assets/app.js?v=2" defer></script>
+</head>
+<body>
+  <header class="page-header">
+    <h1>台灣 PM2.5 預測瀏覽器</h1>
+    <p class="lede">時間序列基礎模型（Chronos-2）能否追上各站訓練的模型？在地圖上選一個測站，比較各模型提前 1、6、24 小時的預測與實際觀測。</p>
+  </header>
+
+  <section class="controls" aria-label="篩選條件">
+    <label class="control">測站
+      <select id="station-select"></select>
+    </label>
+    <label class="control">測試年
+      <select id="year-select"></select>
+    </label>
+    <fieldset class="control segmented" id="lead-group">
+      <legend>提前時間</legend>
+    </fieldset>
+    <fieldset class="control segmented" id="view-group">
+      <legend>檢視</legend>
+    </fieldset>
+    <label class="control">期間
+      <select id="period-select"></select>
+    </label>
+    <label class="control">區間帶（80%）
+      <select id="band-select"></select>
+    </label>
+  </section>
+
+  <section class="model-toggles" id="model-toggles" aria-label="顯示的模型"></section>
+  <p class="toggle-hint muted">勾選方框顯示／隱藏模型；點模型名稱可聚焦，其他模型會變淡，再點一次取消。</p>
+
+  <main class="layout">
+    <aside class="side">
+      <div id="map" class="map" role="region" aria-label="測站地圖"></div>
+      <div class="station-card">
+        <h2 id="station-title">—</h2>
+        <p id="station-sub" class="muted"></p>
+        <p id="station-verdict" class="verdict"></p>
+      </div>
+    </aside>
+
+    <section class="main-col">
+      <div class="chart-card">
+        <div class="chart-head">
+          <h2 id="chart-title">—</h2>
+          <p id="status" class="muted" role="status"></p>
+        </div>
+        <div id="chart" class="chart" role="img" aria-label="PM2.5 觀測與預測折線圖"></div>
+        <p id="chart-note" class="note muted"></p>
+      </div>
+
+      <div class="table-card">
+        <h2 id="table-title">指標</h2>
+        <table class="metrics">
+          <thead>
+            <tr>
+              <th scope="col">模型</th>
+              <th scope="col" class="num">本站 MAE</th>
+              <th scope="col" class="num">本站 80% 覆蓋率</th>
+              <th scope="col" class="num">12 站 MAE</th>
+            </tr>
+          </thead>
+          <tbody id="metrics-body"></tbody>
+        </table>
+        <p class="note muted">MAE 單位 μg/m³，越低越好；80% 覆蓋率越接近 0.80 代表區間越可信。指標以整個測試年、未經四捨五入的預測計算。</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="page-footer muted">
+    <p>資料：環境部環境資料開放平臺（逐時測值 AQX_P_13）；預報風場：Open-Meteo（JMA GSM，前一日發布）。測試年 2025（以 2021–2024 訓練）與 2024（以 2021–2023 訓練）。</p>
+    <p>程式碼與完整實驗：<a href="https://github.com/pekkachiu/pm25-tsfm" rel="noopener noreferrer">github.com/pekkachiu/pm25-tsfm</a></p>
+  </footer>
+</body>
+</html>

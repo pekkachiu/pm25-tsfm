@@ -152,3 +152,17 @@ DM_PAIRS = (
     ("chronos2_spatial_all", "xgboost_spatial_all"),
     ("chronos2_spatial_nwp", "xgboost_spatial_nwp"),
 )
+
+# Web demo (GitHub Pages, served from docs/): models shown and their display labels.
+# Only derived forecasts of public MOENV data are exported - no raw files, keys or names.
+WEB_DIR = "docs"
+WEB_DATA_DIR = "docs/data"
+WEB_MODELS = {
+    "persistence": "持續性 Persistence",
+    "xgboost_nwp": "XGBoost＋NWP",
+    "chronos2_uni": "Chronos-2 零樣本",
+    "chronos2_wind_nwp": "Chronos-2 零樣本＋NWP",
+    "chronos2_ft_nwp": "Chronos-2 微調＋NWP",
+}
+WEB_DECIMALS = 1  # forecasts are rounded for size; metrics are computed before rounding
+REGION_ZH = {"northern": "北部", "central": "中部", "yunchianan": "雲嘉南", "kaoping": "高屏"}
