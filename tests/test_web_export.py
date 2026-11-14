@@ -64,6 +64,14 @@ def test_build_station_metrics_before_rounding():
     assert metrics["a"]["1"]["n"] == 6
 
 
+def test_build_station_point_forecast_has_no_coverage():
+    point = _preds("p")
+    point = point.assign(q10=point["q50"], q90=point["q50"])
+    out = build_station({"a": _preds("a"), "p": point}, "古亭", 2025)
+    assert out["metrics"]["p"]["1"]["coverage80"] is None
+    assert out["metrics"]["a"]["1"]["coverage80"] is not None
+
+
 def test_build_station_rejects_misaligned_models():
     frames = {"a": _preds("a"), "b": _preds("b", drop=(0,))}
     with pytest.raises(ValueError, match="b"):

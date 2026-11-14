@@ -90,13 +90,18 @@ def _dense(series: pd.Series, positions: np.ndarray, size: int) -> list:
 
 
 def _metrics(df: pd.DataFrame) -> dict:
-    """MAE and 80% coverage per lead, from unrounded forecasts."""
+    """MAE and 80% coverage per lead, from unrounded forecasts.
+
+    Point forecasts (q10 == q90 everywhere, e.g. persistence) have no interval, so their
+    coverage is null rather than a misleading near-zero rate.
+    """
     out = {}
     for lead, group in df.groupby(level="lead"):
         covered = (group["q10"] <= group["y"]) & (group["y"] <= group["q90"])
+        has_interval = bool((group["q90"] > group["q10"]).any())
         out[str(lead)] = {
             "mae": round(float((group["y"] - group["q50"]).abs().mean()), METRIC_DECIMALS),
-            "coverage80": round(float(covered.mean()), METRIC_DECIMALS),
+            "coverage80": round(float(covered.mean()), METRIC_DECIMALS) if has_interval else None,
             "n": int(len(group)),
         }
     return out
