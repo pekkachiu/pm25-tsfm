@@ -2,41 +2,47 @@
 "use strict";
 
 (function () {
+  const core = window.PM25Core || null;
   const DATA_ROOT = "data/";
   const HOUR_MS = 3600 * 1000;
-  const TAIPEI_OFFSET_MS = 8 * HOUR_MS; // shift instants so the UTC axis reads Taiwan time
+  const TAIPEI_OFFSET_MS = 8 * HOUR_MS; // shifted instants let the UTC axis read Taiwan time
   const THRESHOLD = 30.5;
-  const DEFAULT_MONTH = 0; // January: autumn-winter episode season
+  const EPISODE_COUNT = 3;
+  const EPISODE_WINDOW_HOURS = 7 * 24; // one week around each episode
+  const EPISODE_MIN_GAP_HOURS = 7 * 24;
+  const ERROR_WINDOW_HOURS = 24; // rolling window of the error view
+  const ERROR_MIN_VALID = 12;
+  const FADED_OPACITY = 0.15;
   const DEFAULT_VISIBLE = ["chronos2_ft_nwp", "xgboost_nwp", "chronos2_uni"];
   const DASHED = new Set(["persistence"]);
   const FINETUNED = "chronos2_ft_nwp";
   const ZERO_SHOT = "chronos2_uni";
   const TRAINED = "xgboost_nwp";
   const OBSERVED_LABEL = "觀測值";
-  const MONTHS = [
-    "1 月",
-    "2 月",
-    "3 月",
-    "4 月",
-    "5 月",
-    "6 月",
-    "7 月",
-    "8 月",
-    "9 月",
-    "10 月",
-    "11 月",
-    "12 月",
+  const VIEWS = [
+    { id: "value", label: "預測值" },
+    { id: "error", label: "誤差" },
   ];
+  const NOTES = {
+    value:
+      "虛線為 PM2.5 30.5 μg/m³（AQI 100，對敏感族群不健康）。每個點是「H 小時前」做出的預測中位數；色帶為所選模型的 10%–90% 分位數區間。拖曳下方滑桿可平移、縮放時間。",
+    error:
+      "每條線是該模型過去 24 小時的平均絕對誤差 |預測 − 觀測|，越低越準。拖曳下方滑桿可平移、縮放時間。",
+  };
 
   const state = {
     index: null,
     station: null,
     year: null,
     lead: 24,
-    month: DEFAULT_MONTH,
+    view: "value",
+    period: "ep0", // ep<k> | m<month> | all
     band: FINETUNED,
+    focus: null,
     visible: new Set(DEFAULT_VISIBLE),
     data: null,
+    episodes: [],
+    observed: [],
   };
   const cache = new Map();
   let chart = null;
@@ -53,6 +59,11 @@
 
   function modelColor(id) {
     return cssVar(`--m-${id}`) || cssVar("--text-secondary");
+  }
+
+  function modelLabel(id) {
+    const model = state.index.models.find((m) => m.id === id);
+    return model ? model.label : id;
   }
 
   function escapeHtml(text) {
@@ -118,6 +129,10 @@
     return cache.get(path);
   }
 
+  function startMsOf(data) {
+    return Date.parse(data.start) + TAIPEI_OFFSET_MS;
+  }
+
   // ---------- controls ----------
 
   function option(value, label) {
@@ -125,6 +140,21 @@
     el.value = String(value);
     el.textContent = label;
     return el;
+  }
+
+  function segmented(groupId, name, items, current, onChange) {
+    const group = $(groupId);
+    items.forEach((item) => {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = name;
+      input.value = String(item.id);
+      input.checked = item.id === current;
+      input.addEventListener("change", () => onChange(item.id));
+      label.append(input, document.createTextNode(item.label));
+      group.append(label);
+    });
   }
 
   function buildControls() {
@@ -147,28 +177,18 @@
       refresh();
     });
 
-    const leadGroup = $("lead-group");
-    index.leads.forEach((h) => {
-      const label = document.createElement("label");
-      const input = document.createElement("input");
-      input.type = "radio";
-      input.name = "lead";
-      input.value = String(h);
-      input.checked = h === state.lead;
-      input.addEventListener("change", () => {
-        state.lead = h;
-        render();
-      });
-      label.append(input, document.createTextNode(`${h} 小時`));
-      leadGroup.append(label);
+    const leads = index.leads.map((h) => ({ id: h, label: `${h} 小時` }));
+    segmented("lead-group", "lead", leads, state.lead, (h) => {
+      state.lead = h;
+      render();
+    });
+    segmented("view-group", "view", VIEWS, state.view, (v) => {
+      state.view = v;
+      render();
     });
 
-    const monthSelect = $("month-select");
-    monthSelect.append(option(-1, "全年"));
-    MONTHS.forEach((m, i) => monthSelect.append(option(i, m)));
-    monthSelect.value = String(state.month);
-    monthSelect.addEventListener("change", () => {
-      state.month = Number(monthSelect.value);
+    $("period-select").addEventListener("change", () => {
+      state.period = $("period-select").value;
       applyZoom();
     });
 
@@ -180,38 +200,146 @@
       state.band = bandSelect.value;
       render();
     });
+    buildModelToggles();
+  }
 
+  function keySwatch(id) {
+    const key = document.createElement("span");
+    key.className = DASHED.has(id) ? "key dashed" : "key";
+    key.dataset.model = id;
+    return key;
+  }
+
+  function buildModelToggles() {
     const toggles = $("model-toggles");
     const observed = document.createElement("span");
-    observed.className = "model-toggle";
+    observed.className = "model-toggle observed-chip";
     const observedKey = document.createElement("span");
     observedKey.className = "key observed";
     observed.append(observedKey, document.createTextNode(OBSERVED_LABEL));
     toggles.append(observed);
-    index.models.forEach((m) => {
-      const label = document.createElement("label");
-      label.className = "model-toggle";
+    state.index.models.forEach((m) => {
+      const chip = document.createElement("span");
+      chip.className = "model-toggle";
+      chip.dataset.model = m.id;
       const input = document.createElement("input");
       input.type = "checkbox";
       input.checked = state.visible.has(m.id);
-      input.addEventListener("change", () => {
-        if (input.checked) state.visible.add(m.id);
-        else state.visible.delete(m.id);
-        render();
-      });
-      const key = document.createElement("span");
-      key.className = DASHED.has(m.id) ? "key dashed" : "key";
-      key.dataset.model = m.id;
-      label.append(input, key, document.createTextNode(m.label));
-      toggles.append(label);
+      input.setAttribute("aria-label", `顯示 ${m.label}`);
+      input.addEventListener("change", () => setVisible(m.id, input.checked));
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "focus-btn";
+      button.setAttribute("aria-pressed", "false");
+      button.title = "聚焦這個模型（再點一次取消）";
+      button.append(keySwatch(m.id), document.createTextNode(m.label));
+      button.addEventListener("click", () => toggleFocus(m.id));
+      chip.append(input, button);
+      toggles.append(chip);
     });
     paintKeys();
+  }
+
+  function setVisible(id, visible) {
+    if (visible) state.visible.add(id);
+    else state.visible.delete(id);
+    if (!visible && state.focus === id) state.focus = null;
+    render();
+  }
+
+  function toggleFocus(id) {
+    state.focus = state.focus === id ? null : id;
+    if (state.focus) state.visible.add(id);
+    render();
+  }
+
+  function syncModelToggles() {
+    document.querySelectorAll(".model-toggle[data-model]").forEach((chip) => {
+      const id = chip.dataset.model;
+      chip.querySelector("input").checked = state.visible.has(id);
+      chip
+        .querySelector("button")
+        .setAttribute("aria-pressed", String(state.focus === id));
+      chip.classList.toggle(
+        "faded",
+        state.focus !== null && state.focus !== id,
+      );
+    });
+    $("model-toggles").classList.toggle("has-focus", state.focus !== null);
   }
 
   function paintKeys() {
     document.querySelectorAll(".key[data-model]").forEach((el) => {
       el.style.setProperty("--key-color", modelColor(el.dataset.model));
     });
+  }
+
+  // ---------- periods (episodes / months / year) ----------
+
+  function computeEpisodes(data) {
+    state.observed = core.mergeObserved(
+      state.index.leads.map((h) => data.leads[String(h)].y),
+    );
+    state.episodes = core.findEpisodes(
+      state.observed,
+      THRESHOLD,
+      EPISODE_COUNT,
+      EPISODE_MIN_GAP_HOURS,
+    );
+  }
+
+  function buildPeriodOptions(data) {
+    const select = $("period-select");
+    select.replaceChildren();
+    const startMs = Date.parse(data.start);
+    if (state.episodes.length > 0) {
+      const group = document.createElement("optgroup");
+      group.label = "高污染事件（一週）";
+      state.episodes.forEach((ep, k) => {
+        const from = core.formatSlot(startMs, ep.start);
+        const to = core.formatSlot(startMs, ep.end);
+        const span = from === to ? from : `${from}–${to}`;
+        group.append(option(`ep${k}`, `${span}，連續 ${ep.hours} 小時 ≥ 30.5`));
+      });
+      select.append(group);
+    }
+    const months = document.createElement("optgroup");
+    months.label = "月份";
+    for (let m = 0; m < 12; m += 1)
+      months.append(option(`m${m}`, `${m + 1} 月`));
+    select.append(months, option("all", "全年"));
+    const valid = [...select.querySelectorAll("option")].some(
+      (o) => o.value === state.period,
+    );
+    if (!valid) state.period = state.episodes.length > 0 ? "ep0" : "m0";
+    select.value = state.period;
+  }
+
+  function zoomRange() {
+    if (!state.data) return null;
+    const startMs = startMsOf(state.data);
+    const size = state.observed.length;
+    if (state.period.startsWith("ep")) {
+      const ep = state.episodes[Number(state.period.slice(2))];
+      if (!ep) return null;
+      const [from, to] = core.windowAround(ep, EPISODE_WINDOW_HOURS, size);
+      return [startMs + from * HOUR_MS, startMs + (to - 1) * HOUR_MS];
+    }
+    if (state.period.startsWith("m")) {
+      const m = Number(state.period.slice(1));
+      return [Date.UTC(state.year, m, 1), Date.UTC(state.year, m + 1, 1)];
+    }
+    return null;
+  }
+
+  function applyZoom() {
+    if (!chart) return;
+    const range = zoomRange();
+    chart.dispatchAction(
+      range
+        ? { type: "dataZoom", startValue: range[0], endValue: range[1] }
+        : { type: "dataZoom", start: 0, end: 100 },
+    );
   }
 
   // ---------- map ----------
@@ -300,18 +428,20 @@
     ];
   }
 
-  function modelSeries(id, label, pred, startMs) {
+  function lineSeries(id, values, startMs) {
+    const faded = state.focus !== null && state.focus !== id;
     return {
-      name: label,
+      name: modelLabel(id),
       type: "line",
       symbol: "none",
       connectNulls: false,
       sampling: "lttb",
-      z: 3,
-      data: toPairs(pred.q50, startMs),
+      z: faded ? 2 : 3,
+      data: toPairs(values, startMs),
       lineStyle: {
-        width: 2,
+        width: state.focus === id ? 2.5 : 2,
         color: modelColor(id),
+        opacity: faded ? FADED_OPACITY : 1,
         type: DASHED.has(id) ? "dashed" : "solid",
       },
       itemStyle: { color: modelColor(id) },
@@ -346,6 +476,39 @@
     };
   }
 
+  function shownModels(lead) {
+    return state.index.models
+      .map((m) => m.id)
+      .filter((id) => state.visible.has(id) && lead.models[id]);
+  }
+
+  function valueSeries(lead, startMs) {
+    const series = [];
+    const band = state.band ? state.focus || state.band : "";
+    if (band && lead.models[band])
+      series.push(...bandSeries(lead.models[band], startMs, modelColor(band)));
+    shownModels(lead).forEach((id) =>
+      series.push(lineSeries(id, lead.models[id].q50, startMs)),
+    );
+    series.push(observedSeries(lead.y, startMs));
+    return series;
+  }
+
+  function errorSeries(lead, startMs) {
+    return shownModels(lead).map((id) =>
+      lineSeries(
+        id,
+        core.rollingAbsError(
+          lead.models[id].q50,
+          lead.y,
+          ERROR_WINDOW_HOURS,
+          ERROR_MIN_VALID,
+        ),
+        startMs,
+      ),
+    );
+  }
+
   function formatTime(ms) {
     const d = new Date(ms);
     const pad = (n) => String(n).padStart(2, "0");
@@ -362,22 +525,17 @@
         `<div class="tt-row"><span class="tt-key" style="border-color:${escapeHtml(p.color)}"></span>` +
         `<strong>${Number(p.value[1]).toFixed(1)}</strong><span>${escapeHtml(p.seriesName)}</span></div>`,
     );
-    return `<div class="tt-time">${escapeHtml(formatTime(params[0].value[0]))}（台灣時間）</div>${lines.join("")}`;
+    const suffix = state.view === "error" ? "，過去 24 小時平均誤差" : "";
+    return `<div class="tt-time">${escapeHtml(formatTime(params[0].value[0]))}（台灣時間${suffix}）</div>${lines.join("")}`;
   }
 
   function chartOption(data) {
-    const startMs = Date.parse(data.start) + TAIPEI_OFFSET_MS;
+    const startMs = startMsOf(data);
     const lead = data.leads[String(state.lead)];
-    const series = [];
-    const bandPred = state.band && lead.models[state.band];
-    if (bandPred)
-      series.push(...bandSeries(bandPred, startMs, modelColor(state.band)));
-    state.index.models
-      .filter((m) => state.visible.has(m.id) && lead.models[m.id])
-      .forEach((m) =>
-        series.push(modelSeries(m.id, m.label, lead.models[m.id], startMs)),
-      );
-    series.push(observedSeries(lead.y, startMs));
+    const series =
+      state.view === "error"
+        ? errorSeries(lead, startMs)
+        : valueSeries(lead, startMs);
     const text = cssVar("--text-secondary");
     const grid = cssVar("--grid");
     return {
@@ -385,7 +543,7 @@
       animation: false,
       backgroundColor: "transparent",
       textStyle: { fontFamily: getComputedStyle(document.body).fontFamily },
-      grid: { left: 48, right: 16, top: 16, bottom: 72 },
+      grid: { left: 48, right: 16, top: 36, bottom: 72 },
       tooltip: {
         trigger: "axis",
         formatter: tooltipFormatter,
@@ -402,13 +560,22 @@
         type: "time",
         axisLine: { lineStyle: { color: grid } },
         axisTick: { show: false },
-        axisLabel: { color: text, hideOverlap: true },
+        axisLabel: {
+          color: text,
+          hideOverlap: true,
+          formatter: {
+            year: "{yyyy}",
+            month: "{M} 月",
+            day: "{M}/{d}",
+            hour: "{HH}:00",
+          },
+        },
         splitLine: { show: false },
       },
       yAxis: {
         type: "value",
-        name: "μg/m³",
-        nameTextStyle: { color: text, align: "right" },
+        name: state.view === "error" ? "誤差 μg/m³" : "μg/m³",
+        nameTextStyle: { color: text, align: "left" },
         min: 0,
         axisLabel: { color: text },
         splitLine: { lineStyle: { color: grid } },
@@ -430,24 +597,6 @@
       ],
       series,
     };
-  }
-
-  function zoomRange() {
-    if (state.month < 0 || !state.year) return null;
-    return [
-      Date.UTC(state.year, state.month, 1),
-      Date.UTC(state.year, state.month + 1, 1),
-    ];
-  }
-
-  function applyZoom() {
-    if (!chart) return;
-    const range = zoomRange();
-    chart.dispatchAction(
-      range
-        ? { type: "dataZoom", startValue: range[0], endValue: range[1] }
-        : { type: "dataZoom", start: 0, end: 100 },
-    );
   }
 
   // ---------- tables & text ----------
@@ -490,10 +639,7 @@
       const name = document.createElement("td");
       const wrap = document.createElement("span");
       wrap.className = "model-name";
-      const swatch = document.createElement("span");
-      swatch.className = DASHED.has(m.id) ? "key dashed" : "key";
-      swatch.dataset.model = m.id;
-      wrap.append(swatch, document.createTextNode(m.label));
+      wrap.append(keySwatch(m.id), document.createTextNode(m.label));
       name.append(wrap);
       const pooled = pooledMae(m.id, state.year, state.lead);
       tr.append(
@@ -523,14 +669,15 @@
     const zs = get(ZERO_SHOT);
     const xgb = get(TRAINED);
     if (ft == null || zs == null || xgb == null) return;
-    const label = (id) => state.index.models.find((m) => m.id === id).label;
     const sentence = (id, value) => {
       const gap = relativeGap(value, xgb);
       const span = document.createElement("span");
       const strong = document.createElement("strong");
       strong.textContent = `${gap > 0 ? "高" : "低"} ${Math.abs(gap).toFixed(1)}%`;
       span.append(
-        document.createTextNode(`${label(id)} 的 MAE 比 ${label(TRAINED)} `),
+        document.createTextNode(
+          `${modelLabel(id)} 的 MAE 比 ${modelLabel(TRAINED)} `,
+        ),
         strong,
       );
       return span;
@@ -542,21 +689,29 @@
     );
   }
 
-  // ---------- flow ----------
-
-  function render() {
-    if (!state.data || !chart) return;
-    const data = state.data;
-    chart.setOption(chartOption(data), { notMerge: true });
-    applyZoom();
-    renderTable(data);
-    renderVerdict(data);
+  function renderText() {
     const entry = state.index.stations.find((s) => s.name === state.station);
+    const what =
+      state.view === "error" ? "誤差（24 小時移動平均）" : "預測與觀測";
     $("station-title").textContent = `${entry.name}（${entry.en}）`;
     $("station-sub").textContent =
       `${entry.region_zh}空品區 · 測試年 ${state.year} · 提前 ${state.lead} 小時`;
     $("chart-title").textContent =
-      `${entry.name} 提前 ${state.lead} 小時的預測與觀測`;
+      `${entry.name} 提前 ${state.lead} 小時的${what}`;
+    $("chart-note").textContent = NOTES[state.view];
+    $("band-select").disabled = state.view === "error";
+  }
+
+  // ---------- flow ----------
+
+  function render() {
+    syncModelToggles();
+    if (!state.data || !chart) return;
+    chart.setOption(chartOption(state.data), { notMerge: true });
+    applyZoom();
+    renderTable(state.data);
+    renderVerdict(state.data);
+    renderText();
   }
 
   async function refresh() {
@@ -574,6 +729,8 @@
       const data = await loadStation(state.station, state.year);
       if (wanted !== `${state.station}|${state.year}`) return; // a newer selection won
       state.data = data;
+      computeEpisodes(data);
+      buildPeriodOptions(data);
       setStatus("");
       render();
     } catch (err) {
@@ -596,6 +753,10 @@
   }
 
   async function init() {
+    if (!core) {
+      setStatus("頁面元件載入失敗，請重新整理頁面。");
+      return;
+    }
     try {
       state.index = validateIndex(await fetchJson("index.json"));
     } catch (err) {

@@ -5,3 +5,5 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 uv run pytest --ignore=tests/test_xgboost_model.py --cov-report= "$@"
 uv run pytest tests/test_xgboost_model.py --cov-append "$@"
+# Web demo helpers (docs/assets/core.js), Node's built-in test runner - no npm packages.
+node --test tests/web/*.test.cjs

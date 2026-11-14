@@ -11,14 +11,15 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"
         integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vJgsLZbdLE3w=="
         crossorigin="anonymous" referrerpolicy="no-referrer">
-  <link rel="stylesheet" href="assets/style.css">
+  <link rel="stylesheet" href="assets/style.css?v=2">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
           integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg=="
           crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"
           integrity="sha512-XSmbX3mhrD2ix5fXPTRQb2FwK22sRMVQTpBP2ac8hX7Dh/605hA2QDegVWiAvZPiXIxOV0CbkmUjGionDpbCmw=="
           crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-  <script src="assets/app.js" defer></script>
+  <script src="assets/core.js?v=2" defer></script>
+  <script src="assets/app.js?v=2" defer></script>
 </head>
 <body>
   <header class="page-header">
@@ -36,8 +37,11 @@
     <fieldset class="control segmented" id="lead-group">
       <legend>提前時間</legend>
     </fieldset>
+    <fieldset class="control segmented" id="view-group">
+      <legend>檢視</legend>
+    </fieldset>
     <label class="control">期間
-      <select id="month-select"></select>
+      <select id="period-select"></select>
     </label>
     <label class="control">區間帶（80%）
       <select id="band-select"></select>
@@ -45,6 +49,7 @@
   </section>
 
   <section class="model-toggles" id="model-toggles" aria-label="顯示的模型"></section>
+  <p class="toggle-hint muted">勾選方框顯示／隱藏模型；點模型名稱可聚焦，其他模型會變淡，再點一次取消。</p>
 
   <main class="layout">
     <aside class="side">
@@ -63,7 +68,7 @@
           <p id="status" class="muted" role="status"></p>
         </div>
         <div id="chart" class="chart" role="img" aria-label="PM2.5 觀測與預測折線圖"></div>
-        <p class="note muted">虛線為 PM2.5 30.5 μg/m³（AQI 100，對敏感族群不健康）。每個點是「H 小時前」做出的預測中位數；色帶為所選模型的 10%–90% 分位數區間。拖曳下方滑桿可平移、縮放時間。</p>
+        <p id="chart-note" class="note muted"></p>
       </div>
 
       <div class="table-card">
